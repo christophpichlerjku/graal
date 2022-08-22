@@ -31,7 +31,9 @@ package com.oracle.truffle.llvm.launcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -186,6 +188,14 @@ public class LLVMLauncher extends AbstractLanguageLauncher {
         // collect the file:
         if (file == null && iterator.hasNext()) {
             file = Paths.get(iterator.next()).toFile();
+            try {
+                java.nio.file.Path pth = Paths.get("/home/christoph/tmpgraal");
+                Files.deleteIfExists(pth);
+                Files.writeString(pth, file.toString(), StandardOpenOption.CREATE);
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
         }
 
         // collect the program args:

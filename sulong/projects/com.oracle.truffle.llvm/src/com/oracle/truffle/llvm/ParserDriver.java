@@ -37,6 +37,7 @@ import com.oracle.truffle.api.TruffleLogger;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.llvm.initialization.LoadDependencyNode;
+import com.oracle.truffle.llvm.initialization.LoadHybridNode;
 import com.oracle.truffle.llvm.initialization.LoadModulesNode;
 import com.oracle.truffle.llvm.initialization.LoadNativeNode;
 import com.oracle.truffle.llvm.parser.LLVMParser;
@@ -78,7 +79,9 @@ import com.oracle.truffle.llvm.runtime.options.SulongEngineOption;
 import com.oracle.truffle.llvm.runtime.target.TargetTriple;
 import org.graalvm.polyglot.io.ByteSequence;
 
+import java.io.IOException;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -142,7 +145,26 @@ final class ParserDriver {
         insertDefaultDependencies(source.getName());
         // Process the bitcode file and its dependencies in the dynamic linking order
         LLVMParserResult result = parseLibraryWithSource(source, bytes);
-        if (result == null) {
+        boolean isMain = false;
+        try {
+            String mainName = Files.lines(Paths.get("/home/christoph/tmpgraal")).findFirst().get();
+            isMain = source.getName().contains(mainName);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        boolean loadHybrid = !source.getName().contains("libsulong") && !isMain &&
+                        context.getEnv().getOptions().get(SulongEngineOption.HYBRID_EXECUTION);
+        if (loadHybrid) {
+            RootNode nativeNode;
+            TruffleFile file = createNativeTruffleFile(source.getName(), source.getPath());
+            // An empty call target is returned for native libraries.
+            if (file == null) {
+                nativeNode = RootNode.createConstantNode(0);
+            } else {
+                nativeNode = createNativeLibrary(file);
+            }
+            return LoadHybridNode.create(language, null, nativeNode).getCallTarget();
+        } else if (result == null) {
             // If result is null, then the file parsed does not contain bitcode,
             // as it's purely native.
             // DLOpen will go through here. We will have to adjust loadNativeNode to be able
@@ -152,9 +174,9 @@ final class ParserDriver {
             if (file == null) {
                 return RootNode.createConstantNode(0).getCallTarget();
             }
-            return createNativeLibraryCallTarget(file);
+            return createNativeLibrary(file).getCallTarget();
         }
-        // ensures the library of the source is not native
+// ensures the library of the source is not native
         if (context.isInternalLibraryFile(result.getRuntime().getFile())) {
             String libraryName = getSimpleLibraryName(result.getRuntime().getLibraryName());
             // Add the file scope of the source to the language
@@ -166,7 +188,7 @@ final class ParserDriver {
             resolveRenamedSymbols(result);
         }
         addExternalSymbolsToScopes(result);
-        return createLibraryCallTarget(result.getRuntime().getLibraryName(), result, source);
+        return createLibrary(result.getRuntime().getLibraryName(), result, source).getCallTarget();
     }
 
     @TruffleBoundary
@@ -512,15 +534,15 @@ final class ParserDriver {
      * @param source the {@link Source} of the library
      * @return the call target for initialising the library.
      */
-    private CallTarget createLibraryCallTarget(String name, LLVMParserResult parserResult, Source source) {
+    private RootNode createLibrary(String name, LLVMParserResult parserResult, Source source) {
         if (context.getEnv().getOptions().get(SulongEngineOption.PARSE_ONLY)) {
-            return RootNode.createConstantNode(0).getCallTarget();
+            return RootNode.createConstantNode(0);
         } else {
             // check if the functions should be resolved eagerly or lazily.
             boolean lazyParsing = context.getEnv().getOptions().get(SulongEngineOption.LAZY_PARSING) && !context.getEnv().getOptions().get(SulongEngineOption.AOTCacheStore);
             LoadModulesNode loadModules = LoadModulesNode.create(name, parserResult, lazyParsing, context.isInternalLibraryFile(parserResult.getRuntime().getFile()), libraryDependencies, source,
                             language);
-            return loadModules.getCallTarget();
+            return loadModules;
         }
     }
 
@@ -529,13 +551,13 @@ final class ParserDriver {
      *
      * @return the call target for initialising the library.
      */
-    private CallTarget createNativeLibraryCallTarget(TruffleFile file) {
+    private RootNode createNativeLibrary(TruffleFile file) {
         if (context.getEnv().getOptions().get(SulongEngineOption.PARSE_ONLY)) {
-            return RootNode.createConstantNode(0).getCallTarget();
+            return RootNode.createConstantNode(0);
         } else {
             // check if the functions should be resolved eagerly or lazily.
             LoadNativeNode loadNative = LoadNativeNode.create(language, file);
-            return loadNative.getCallTarget();
+            return loadNative;
         }
     }
 }

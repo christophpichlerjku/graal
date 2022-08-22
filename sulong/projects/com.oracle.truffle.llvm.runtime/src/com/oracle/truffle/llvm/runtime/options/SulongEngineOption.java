@@ -83,6 +83,12 @@ public final class SulongEngineOption {
             usageSyntax = "true|false")
     public static final OptionKey<Boolean> CXX_INTEROP = new OptionKey<>(false);
 
+    @Option(name= "llvm.hybridExecution",
+                    category = OptionCategory.EXPERT,
+                    help="Enables running llvm code in hybrid (native+sulong) mode",
+                    usageSyntax = "true|false")
+            public static final OptionKey<Boolean> HYBRID_EXECUTION = new OptionKey<>(false);
+
     @Option(name = "llvm.optimizeFrameSlots",
             category = OptionCategory.INTERNAL,
             help = "Enable fusing of instructions producing values with instructions consuming values.",
