@@ -152,18 +152,24 @@ final class ParserDriver {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        boolean loadHybrid = !source.getName().contains("libsulong") && !isMain &&
+        boolean loadHybrid = !source.getName().contains("libsulong") && !isMain && result != null &&
                         context.getEnv().getOptions().get(SulongEngineOption.HYBRID_EXECUTION);
         if (loadHybrid) {
-            RootNode nativeNode;
+            // native part
             TruffleFile file = createNativeTruffleFile(source.getName(), source.getPath());
             // An empty call target is returned for native libraries.
-            if (file == null) {
-                nativeNode = RootNode.createConstantNode(0);
-            } else {
-                nativeNode = createNativeLibrary(file);
+            RootNode nativeNode = file == null ? RootNode.createConstantNode(0) : createNativeLibrary(file);
+
+            if (context.isInternalLibraryFile(result.getRuntime().getFile())) {
+                String libraryName = getSimpleLibraryName(result.getRuntime().getLibraryName());
+                // Add the file scope of the source to the language
+                language.addInternalFileScope(libraryName, result.getRuntime().getFileScope());
+                // renaming is attempted only for internal libraries.
+                resolveRenamedSymbols(result);
             }
-            return LoadHybridNode.create(language, null, nativeNode).getCallTarget();
+            addExternalSymbolsToScopes(result);
+            RootNode hybridNode = createHybridLibrary(result.getRuntime().getLibraryName(), result, source, nativeNode);
+            return hybridNode.getCallTarget();
         } else if (result == null) {
             // If result is null, then the file parsed does not contain bitcode,
             // as it's purely native.
@@ -543,6 +549,26 @@ final class ParserDriver {
             LoadModulesNode loadModules = LoadModulesNode.create(name, parserResult, lazyParsing, context.isInternalLibraryFile(parserResult.getRuntime().getFile()), libraryDependencies, source,
                             language);
             return loadModules;
+        }
+    }
+
+    /**
+     * Creates the call target of the load hybrid node, which initialise the library.
+     *
+     * @param name the name of the library
+     * @param parserResult the {@link LLVMParserResult} for the library
+     * @param source the {@link Source} of the library
+     * @return the call target for initialising the library.
+     */
+    private RootNode createHybridLibrary(String name, LLVMParserResult parserResult, Source source, RootNode loadNativeNode) {
+        if (context.getEnv().getOptions().get(SulongEngineOption.PARSE_ONLY)) {
+            return RootNode.createConstantNode(0);
+        } else {
+            // check if the functions should be resolved eagerly or lazily.
+            boolean lazyParsing = context.getEnv().getOptions().get(SulongEngineOption.LAZY_PARSING) && !context.getEnv().getOptions().get(SulongEngineOption.AOTCacheStore);
+            LoadHybridNode loadHybridNode = LoadHybridNode.create(name, parserResult, lazyParsing, context.isInternalLibraryFile(parserResult.getRuntime().getFile()), libraryDependencies, source,
+                            language, loadNativeNode);
+            return loadHybridNode;
         }
     }
 

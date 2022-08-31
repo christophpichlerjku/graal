@@ -86,7 +86,7 @@ import java.util.List;
  * been completed only the root library will return the non-null scope for the initialised library,
  * while the dependencies will return null.
  */
-public final class LoadModulesNode extends LLVMRootNode {
+public class LoadModulesNode extends LLVMRootNode {
 
     private static final String MAIN_METHOD_NAME = "main";
 
@@ -128,7 +128,7 @@ public final class LoadModulesNode extends LLVMRootNode {
 
     }
 
-    private LoadModulesNode(String name, LLVMParserResult parserResult, boolean isInternalSulongLibrary,
+    protected LoadModulesNode(String name, LLVMParserResult parserResult, boolean isInternalSulongLibrary,
                     FrameDescriptor rootFrame, boolean lazyParsing, List<LoadDependencyNode> libraryDependencies, Source source, LLVMLanguage language) throws Type.TypeOverflowException {
         super(language, rootFrame, parserResult.getRuntime().getNodeFactory().createStackAccess());
         this.mainFunctionCallTarget = null;

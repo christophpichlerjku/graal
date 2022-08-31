@@ -29,31 +29,52 @@
  */
 package com.oracle.truffle.llvm.initialization;
 
+import java.util.List;
+
+import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.llvm.parser.LLVMParserResult;
 import com.oracle.truffle.llvm.runtime.LLVMHybridModeLibrary;
 import com.oracle.truffle.llvm.runtime.LLVMLanguage;
+import com.oracle.truffle.llvm.runtime.LLVMUnsupportedException;
+import com.oracle.truffle.llvm.runtime.memory.LLVMStack;
+import com.oracle.truffle.llvm.runtime.types.Type;
 
-public final class LoadHybridNode extends RootNode {
+public final class LoadHybridNode extends LoadModulesNode {
 
     private final RootNode loadNativeNode;
-    private final RootNode loadModulesNode;
 
-    private LoadHybridNode(LLVMLanguage language, RootNode loadModulesNode, RootNode loadNativeNode) {
-        super(language);
-        this.loadModulesNode = loadModulesNode;
+    protected LoadHybridNode(String name, LLVMParserResult parserResult, boolean isInternalSulongLibrary,
+                    FrameDescriptor rootFrame, boolean lazyParsing, List<LoadDependencyNode> libraryDependencies, Source source, LLVMLanguage language, RootNode loadNativeNode)
+                    throws Type.TypeOverflowException {
+        super(name, parserResult, isInternalSulongLibrary, rootFrame, lazyParsing, libraryDependencies, source, language);
         this.loadNativeNode = loadNativeNode;
     }
 
-    public static LoadHybridNode create(LLVMLanguage language, RootNode loadModulesNode, RootNode loadNativeNode) {
-        return new LoadHybridNode(language, loadModulesNode, loadNativeNode);
+    public static LoadHybridNode create(String soName, LLVMParserResult parserResult,
+                    boolean lazyParsing, boolean isInternalSulongLibrary, List<LoadDependencyNode> libraryDependencies, Source source, LLVMLanguage language, RootNode loadNativeNode) {
+        try {
+            FrameDescriptor.Builder builder = FrameDescriptor.newBuilder();
+            int stackId = builder.addSlot(FrameSlotKind.Object, null, null);
+            assert stackId == LLVMStack.STACK_ID;
+            int uniquesRegionId = builder.addSlot(FrameSlotKind.Object, null, null);
+            assert uniquesRegionId == LLVMStack.UNIQUES_REGION_ID;
+            int basePointerId = builder.addSlot(FrameSlotKind.Long, null, null);
+            assert basePointerId == LLVMStack.BASE_POINTER_ID;
+            return new LoadHybridNode(soName, parserResult, isInternalSulongLibrary, builder.build(), lazyParsing, libraryDependencies, source, language, loadNativeNode);
+        } catch (Type.TypeOverflowException e) {
+            throw new LLVMUnsupportedException(null, LLVMUnsupportedException.UnsupportedReason.UNSUPPORTED_VALUE_RANGE, e);
+        }
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public Object execute(VirtualFrame frame) {
-        TruffleObject sulongLibrary = loadModulesNode == null ? null : (TruffleObject) loadModulesNode.execute(frame);
+        TruffleObject sulongLibrary = (TruffleObject) super.execute(frame);
         TruffleObject nativeLibrary = loadNativeNode == null ? null : (TruffleObject) loadNativeNode.execute(frame);
         LLVMHybridModeLibrary hybridModeLibrary = new LLVMHybridModeLibrary(sulongLibrary, nativeLibrary);
         return hybridModeLibrary;
