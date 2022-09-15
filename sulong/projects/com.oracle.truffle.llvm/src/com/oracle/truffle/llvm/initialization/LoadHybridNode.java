@@ -35,8 +35,10 @@ import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.nodes.ExecutionSignature;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.llvm.parser.LLVMParserResult;
 import com.oracle.truffle.llvm.runtime.LLVMHybridModeLibrary;
 import com.oracle.truffle.llvm.runtime.LLVMLanguage;
@@ -78,6 +80,24 @@ public final class LoadHybridNode extends LoadModulesNode {
         TruffleObject nativeLibrary = loadNativeNode == null ? null : (TruffleObject) loadNativeNode.execute(frame);
         LLVMHybridModeLibrary hybridModeLibrary = new LLVMHybridModeLibrary(sulongLibrary, nativeLibrary);
         return hybridModeLibrary;
+    }
+
+    @Override
+    public String getName() {
+        System.out.println("getName");
+        return super.getName();
+    }
+
+    @Override
+    public SourceSection getSourceSection() {
+        System.out.println("getSourceSection");
+        return super.getSourceSection();
+    }
+
+    @Override
+    protected ExecutionSignature prepareForAOT() {
+        System.out.println("prepareForAOT");
+        return super.prepareForAOT();
     }
 
 }

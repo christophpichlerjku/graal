@@ -85,6 +85,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.stream.Collectors;
@@ -143,23 +144,26 @@ final class ParserDriver {
      */
     private CallTarget parseWithDependencies(Source source, ByteSequence bytes) {
         insertDefaultDependencies(source.getName());
-        // Process the bitcode file and its dependencies in the dynamic linking order
-        LLVMParserResult result = parseLibraryWithSource(source, bytes);
-        boolean isMain = false;
+
+        java.util.function.Predicate<String> isMain = s -> false;
+        java.util.function.Predicate<String> isLib = s -> false;
         try {
-            String mainName = Files.lines(Paths.get("/home/christoph/tmpgraal")).findFirst().get();
-            isMain = source.getName().contains(mainName);
+            String[] files = Files.lines(Paths.get("/home/christoph/tmpgraal")).toArray(String[]::new);
+            isMain = s -> s.contains(files[files.length - 1]);
+            isLib = s -> Arrays.stream(files).limit(files.length - 1).anyMatch(s::contains);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        boolean loadHybrid = !source.getName().contains("libsulong") && !isMain && result != null &&
+        // Process the bitcode file and its dependencies in the dynamic linking order
+        boolean skipLLVMParser = isLib.test(source.getName()) && context.getEnv().getOptions().get(SulongEngineOption.HYBRID_EXECUTION);
+        LLVMParserResult result = skipLLVMParser ? null : parseLibraryWithSource(source, bytes);
+        boolean loadHybrid = !source.getName().contains("libsulong") && !isMain.test(source.getName()) && result != null &&
                         context.getEnv().getOptions().get(SulongEngineOption.HYBRID_EXECUTION);
         if (loadHybrid) {
             // native part
             TruffleFile file = createNativeTruffleFile(source.getName(), source.getPath());
             // An empty call target is returned for native libraries.
             RootNode nativeNode = file == null ? RootNode.createConstantNode(0) : createNativeLibrary(file);
-
             if (context.isInternalLibraryFile(result.getRuntime().getFile())) {
                 String libraryName = getSimpleLibraryName(result.getRuntime().getLibraryName());
                 // Add the file scope of the source to the language

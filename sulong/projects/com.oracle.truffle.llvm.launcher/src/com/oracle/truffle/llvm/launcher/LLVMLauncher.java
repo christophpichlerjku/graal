@@ -181,7 +181,9 @@ public class LLVMLauncher extends AbstractLanguageLauncher {
         if (!path.isEmpty()) {
             polyglotOptions.put("llvm.libraryPath", path.stream().collect(Collectors.joining(":")));
         }
+        StringBuilder sb = new StringBuilder();
         if (!libs.isEmpty()) {
+            libs.stream().map(s -> s + "\n").forEach(sb::append);
             polyglotOptions.put("llvm.libraries", libs.stream().collect(Collectors.joining(":")));
         }
 
@@ -191,7 +193,8 @@ public class LLVMLauncher extends AbstractLanguageLauncher {
             try {
                 java.nio.file.Path pth = Paths.get("/home/christoph/tmpgraal");
                 Files.deleteIfExists(pth);
-                Files.writeString(pth, file.toString(), StandardOpenOption.CREATE);
+                sb.append(file.toString());
+                Files.writeString(pth, sb.toString(), StandardOpenOption.CREATE);
             } catch (IOException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
