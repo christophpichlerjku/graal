@@ -191,7 +191,7 @@ public class LLVMLauncher extends AbstractLanguageLauncher {
         if (file == null && iterator.hasNext()) {
             file = Paths.get(iterator.next()).toFile();
             try {
-                java.nio.file.Path pth = Paths.get("/home/christoph/tmpgraal");
+                java.nio.file.Path pth = Paths.get("./tmpSulongPaths");
                 Files.deleteIfExists(pth);
                 sb.append(file.toString());
                 Files.writeString(pth, sb.toString(), StandardOpenOption.CREATE);

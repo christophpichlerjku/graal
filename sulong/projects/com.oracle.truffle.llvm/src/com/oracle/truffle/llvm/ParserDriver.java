@@ -148,7 +148,7 @@ final class ParserDriver {
         java.util.function.Predicate<String> isMain = s -> false;
         java.util.function.Predicate<String> isLib = s -> false;
         try {
-            String[] files = Files.lines(Paths.get("/home/christoph/tmpgraal")).toArray(String[]::new);
+            String[] files = Files.lines(Paths.get("./tmpSulongPaths")).toArray(String[]::new);
             isMain = s -> s.contains(files[files.length - 1]);
             isLib = s -> Arrays.stream(files).limit(files.length - 1).anyMatch(s::contains);
         } catch (IOException e) {
