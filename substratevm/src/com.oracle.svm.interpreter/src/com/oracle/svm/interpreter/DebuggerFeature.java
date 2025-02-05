@@ -31,6 +31,9 @@ import static com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod.
 import static com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod.VTBL_ONE_IMPL;
 import static com.oracle.svm.interpreter.metadata.InterpreterUniverseImpl.toHexString;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -38,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,12 +74,15 @@ import com.oracle.svm.core.RuntimeAssertionsSupport;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.jdk.RuntimeSupport;
+import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.option.HostedOptionValues;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.NativeImageGenerator;
 import com.oracle.svm.hosted.code.CompileQueue;
+import com.oracle.svm.hosted.code.CompileQueue.CompileTask;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.image.NativeImageHeap;
 import com.oracle.svm.hosted.meta.HostedField;
@@ -95,6 +102,7 @@ import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaField;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaType;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedObjectType;
+import com.oracle.svm.interpreter.metadata.InterpreterUniverse;
 import com.oracle.svm.interpreter.metadata.InterpreterUniverseImpl;
 import com.oracle.svm.interpreter.metadata.MetadataUtil;
 import com.oracle.svm.interpreter.metadata.ReferenceConstant;
@@ -181,6 +189,11 @@ public class DebuggerFeature implements InternalFeature {
     }
 
     @Override
+    public void duringSetup(DuringSetupAccess access) {
+        RuntimeSupport.getRuntimeSupport().addStartupHook(new LogStartupHook());
+    }
+
+    @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         FeatureImpl.BeforeAnalysisAccessImpl accessImpl = (FeatureImpl.BeforeAnalysisAccessImpl) access;
 
@@ -194,6 +207,11 @@ public class DebuggerFeature implements InternalFeature {
 
             accessImpl.registerAsRoot(System.class.getDeclaredMethod("arraycopy", Object.class, int.class, Object.class, int.class, int.class), true,
                             "Allow interpreting methods that call System.arraycopy");
+            accessImpl.registerAsRoot(Math.class.getDeclaredMethod("sqrt", double.class), true, "Hack for allowing Math.sqrt in interpreter");
+
+            accessImpl.registerAsRoot(java.util.Random.class.getConstructor(long.class), true, "Hack for allowing Random.<init> to be called from interpreter");
+            accessImpl.registerAsRoot(Double.class.getDeclaredMethod("longBitsToDouble", long.class), true, "Hack for longBitsToDouble to be called from interpreter");
+            accessImpl.registerAsRoot(Double.class.getDeclaredMethod("doubleToRawLongBits", double.class), true, "Hack for doubleToRawLongBits to be called from interpreter");
         } catch (NoSuchMethodException | NoSuchFieldException e) {
             throw VMError.shouldNotReachHereAtRuntime();
         }
@@ -249,7 +267,7 @@ public class DebuggerFeature implements InternalFeature {
     }
 
     private static boolean isReachable(AnalysisMethod m) {
-        return m.isReachable() || m.isDirectRootMethod() || m.isVirtualRootMethod();
+        return m.isReachable() || m.isInvoked();
     }
 
     @Override
@@ -457,6 +475,8 @@ public class DebuggerFeature implements InternalFeature {
 
         BuildTimeInterpreterUniverse.singleton().createConstantPools(accessImpl.getUniverse());
 
+        List<String> interpretableMethods = new ArrayList<>();
+
         int estOffset = 0;
         for (InterpreterResolvedJavaMethod interpreterMethod : BuildTimeInterpreterUniverse.singleton().getMethods()) {
             HostedMethod hostedMethod = accessImpl.getUniverse().optionalLookup(interpreterMethod.getOriginalMethod());
@@ -498,6 +518,12 @@ public class DebuggerFeature implements InternalFeature {
                 }
 
                 interpreterMethod.setNativeEntryPoint(new MethodPointer(interpreterMethod.getOriginalMethod()));
+
+                CompileTask task = accessImpl.getCompilations().get(hostedMethod);
+                int bytecodeSize = task.result.getBytecodeSize();
+
+                String methodString = String.format("%s::%s::%d", interpreterMethod.getDeclaringClass().getName(), interpreterMethod.getName(), bytecodeSize);
+                interpretableMethods.add(methodString);
             }
 
             if (!interpreterMethod.isStatic() && !interpreterMethod.isConstructor()) {
@@ -524,6 +550,15 @@ public class DebuggerFeature implements InternalFeature {
                     interpreterMethod.setVTableIndex(VTBL_NO_ENTRY);
                 }
             }
+        }
+
+        final Path path = Paths.get(InterpreterOptions.HybridSpecification.getValue());
+        try {
+            Files.deleteIfExists(path);
+            Files.write(path, interpretableMethods, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+            System.out.println("[javahybrid] Wrote %d compilation units to spec file %s".formatted(interpretableMethods.size(), path.toString()));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
         NativeImageHeap heap = accessImpl.getHeap();
@@ -726,4 +761,74 @@ public class DebuggerFeature implements InternalFeature {
             Files.write(path, bytes, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         }
     }
+}
+
+class LogStartupHook implements RuntimeSupport.Hook {
+    class Result {
+        String[] methods = new String[4];
+        String[] classes = new String[4];
+        int[] sizes = new int[4];
+        int length;
+    }
+
+    @Override
+    public void execute(boolean isFirstIsolate) {
+        final String path = InterpreterOptions.HybridSpecification.getValue();
+        if (path.length() == 0) {
+            Log.log().string("No methods set to managed execution").newline();
+            return;
+        }
+
+        InterpreterUniverse universe = DebuggerSupport.singleton().getUniverse();
+        long count = 0;
+        long savedCodeSize = 0;
+        long totalCodeSize = 0;
+        final Result result = parseResult(path);
+
+        for (ResolvedJavaMethod m : universe.getMethods()) {
+            for (int i = 0; i < result.length; i++) {
+                boolean methodMatch = "*".equals(result.methods[i]) || m.getName().equals(result.methods[i]);
+                boolean classNameMatch = "*".equals(result.classes[i]) || m.getDeclaringClass().getName().equals(result.classes[i]);
+                if (methodMatch && classNameMatch) {
+                    InterpreterDirectives.ensureInterpreterExecution(m);
+                    savedCodeSize += m.getCodeSize();
+                    count++;
+                }
+            }
+            totalCodeSize += m.getCodeSize();
+        }
+        printInformation(count, universe.getMethods().size(), "methods set to managed execution");
+        printInformation(savedCodeSize, totalCodeSize, "native image code size saved");
+        Log.log().string("Average method size: ").rational(totalCodeSize, universe.getMethods().size(), 1).newline();
+    }
+
+    private static void printInformation(long part, long total, String text) {
+        Log.log().number(part, 10, true).string(" of ").number(total, 10, true).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
+    }
+
+    private Result parseResult(String path) {
+        Result result = new Result();
+        try {
+            BufferedReader r = new BufferedReader(new FileReader(new File(path)));
+            for (String line = r.readLine(); line != null; line = r.readLine()) {
+                String[] spl = line.split("::");
+                if (spl.length == 3) {
+                    if (result.length >= result.classes.length) {
+                        result.classes = Arrays.copyOf(result.classes, result.length * 2);
+                        result.methods = Arrays.copyOf(result.methods, result.length * 2);
+                        result.sizes = Arrays.copyOf(result.sizes, result.length * 2);
+                    }
+                    result.classes[result.length] = spl[0];
+                    result.methods[result.length] = spl[1];
+                    result.sizes[result.length] = Integer.parseInt(spl[2]);
+                    result.length++;
+                }
+            }
+            Log.log().number(result.length, 10, true).string(" methods found in spec file").newline();
+        } catch (IOException e) {
+            Log.log().string(e.getMessage()).newline();
+        }
+        return result;
+    }
+
 }

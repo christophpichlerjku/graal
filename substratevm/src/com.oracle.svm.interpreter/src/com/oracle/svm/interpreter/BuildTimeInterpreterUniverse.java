@@ -723,7 +723,7 @@ public final class BuildTimeInterpreterUniverse {
 
     static boolean isReachable(InterpreterResolvedJavaMethod method) {
         AnalysisMethod originalMethod = (AnalysisMethod) method.getOriginalMethod();
-        return originalMethod.isReachable() && originalMethod.getDeclaringClass().isReachable();
+        return (originalMethod.isReachable() || originalMethod.isInvoked()) && originalMethod.getDeclaringClass().isReachable();
     }
 
     public void purgeUnreachable(MetaAccessProvider metaAccessProvider) {
