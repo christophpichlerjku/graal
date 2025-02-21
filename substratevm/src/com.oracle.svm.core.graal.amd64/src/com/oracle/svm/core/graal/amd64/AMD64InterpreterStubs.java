@@ -25,9 +25,11 @@
 package com.oracle.svm.core.graal.amd64;
 
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.struct.OffsetOf;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.deopt.DeoptimizationSlotPacking;
+import com.oracle.svm.core.graal.code.CompiledArgumentType;
 import com.oracle.svm.core.graal.code.InterpreterAccessStubData;
 import com.oracle.svm.core.graal.meta.SubstrateRegisterConfig;
 import com.oracle.svm.core.meta.SharedMethod;
@@ -44,10 +46,9 @@ import jdk.vm.ci.amd64.AMD64;
 import jdk.vm.ci.code.CallingConvention;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterArray;
-import jdk.vm.ci.code.RegisterValue;
-import jdk.vm.ci.code.StackSlot;
-import jdk.vm.ci.meta.AllocatableValue;
 import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platform.HOSTED_ONLY;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.c.struct.RawField;
 import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.nativeimage.c.struct.SizeOf;
@@ -60,6 +61,7 @@ import static jdk.vm.ci.amd64.AMD64.xmm0;
 
 public class AMD64InterpreterStubs {
 
+    @Platforms(HOSTED_ONLY.class)
     private static SubstrateAMD64RegisterConfig getRegisterConfig() {
         return new SubstrateAMD64RegisterConfig(SubstrateRegisterConfig.ConfigKind.NORMAL, null, ConfigurationValues.getTarget(),
                         SubstrateOptions.PreserveFramePointer.getValue());
@@ -505,7 +507,8 @@ public class AMD64InterpreterStubs {
         }
 
         @Override
-        public long getGpArgumentAt(AllocatableValue ccArg, Pointer data, int pos) {
+        @Uninterruptible(reason = REASON)
+        public long getGpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos) {
             InterpreterDataAMD64 p = (InterpreterDataAMD64) data;
             return switch (pos) {
                 case 0 -> p.getAbiGp0();
@@ -515,20 +518,21 @@ public class AMD64InterpreterStubs {
                 case 4 -> p.getAbiGp4();
                 case 5 -> p.getAbiGp5();
                 default -> {
-                    StackSlot stackSlot = (StackSlot) ccArg;
+                    VMError.guarantee(cArgType.isStackSlot());
                     Pointer sp = Word.pointer(p.getAbiSpReg());
                     int spAdjustmentOnCall = ConfigurationValues.getTarget().wordSize;
-                    int offset = stackSlot.getOffset(0) + spAdjustmentOnCall;
+                    int offset = cArgType.getStackOffset() + spAdjustmentOnCall;
                     yield sp.readLong(offset);
                 }
             };
         }
 
         @Override
-        public long setGpArgumentAt(AllocatableValue ccArg, Pointer data, int pos, long val) {
+        @Uninterruptible(reason = REASON)
+        public long setGpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos, long val) {
             InterpreterDataAMD64 p = (InterpreterDataAMD64) data;
             if (pos >= 0 && pos <= 5) {
-                VMError.guarantee(ccArg instanceof RegisterValue);
+                VMError.guarantee(cArgType.isRegister());
                 switch (pos) {
                     case 0 -> p.setAbiGp0(val);
                     case 1 -> p.setAbiGp1(val);
@@ -540,10 +544,10 @@ public class AMD64InterpreterStubs {
                 /* no GC mask required */
                 return 0;
             }
-            StackSlot stackSlot = (StackSlot) ccArg;
+            VMError.guarantee(cArgType.isStackSlot());
 
             Pointer sp = Word.pointer(p.getAbiSpReg());
-            int offset = stackSlot.getOffset(0);
+            int offset = cArgType.getStackOffset();
             VMError.guarantee(sp.isNonNull());
             VMError.guarantee(offset < p.getStackSize());
 
@@ -553,16 +557,18 @@ public class AMD64InterpreterStubs {
             return 1L << (pos - 6);
         }
 
+        @Uninterruptible(reason = Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
         private static int upperFpEnd() {
             /* only 4 floating point regs on Windows, 8 otherwise */
             return Platform.includedIn(Platform.WINDOWS.class) ? 3 : 7;
         }
 
         @Override
-        public long getFpArgumentAt(AllocatableValue ccArg, Pointer data, int pos) {
+        @Uninterruptible(reason = REASON)
+        public long getFpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos) {
             InterpreterDataAMD64 p = (InterpreterDataAMD64) data;
             if (pos >= 0 && pos <= upperFpEnd()) {
-                VMError.guarantee(ccArg instanceof RegisterValue);
+                VMError.guarantee(cArgType.isRegister());
                 switch (pos) {
                     case 0:
                         return p.getAbiFpArg0();
@@ -582,20 +588,21 @@ public class AMD64InterpreterStubs {
                         return p.getAbiFpArg7();
                 }
             }
-            StackSlot stackSlot = (StackSlot) ccArg;
+            VMError.guarantee(cArgType.isStackSlot());
             Pointer sp = Word.pointer(p.getAbiSpReg());
 
             int spAdjustmentOnCall = ConfigurationValues.getTarget().wordSize;
-            int offset = stackSlot.getOffset(0) + spAdjustmentOnCall;
+            int offset = cArgType.getStackOffset() + spAdjustmentOnCall;
 
             return sp.readLong(offset);
         }
 
         @Override
-        public void setFpArgumentAt(AllocatableValue ccArg, Pointer data, int pos, long val) {
+        @Uninterruptible(reason = REASON)
+        public void setFpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos, long val) {
             InterpreterDataAMD64 p = (InterpreterDataAMD64) data;
             if (pos >= 0 && pos <= upperFpEnd()) {
-                VMError.guarantee(ccArg instanceof RegisterValue);
+                VMError.guarantee(cArgType.isRegister());
                 switch (pos) {
                     case 0 -> p.setAbiFpArg0(val);
                     case 1 -> p.setAbiFpArg1(val);
@@ -607,10 +614,10 @@ public class AMD64InterpreterStubs {
                     case 7 -> p.setAbiFpArg7(val);
                 }
             } else {
-                StackSlot stackSlot = (StackSlot) ccArg;
+                VMError.guarantee(cArgType.isStackSlot());
 
                 Pointer sp = Word.pointer(p.getAbiSpReg());
-                int offset = stackSlot.getOffset(0);
+                int offset = cArgType.getStackOffset();
 
                 VMError.guarantee(sp.isNonNull());
                 VMError.guarantee(offset < p.getStackSize());
@@ -620,21 +627,25 @@ public class AMD64InterpreterStubs {
         }
 
         @Override
+        @Uninterruptible(reason = REASON)
         public long getGpReturn(Pointer data) {
             return ((InterpreterDataAMD64) data).getAbiGpRet();
         }
 
         @Override
+        @Uninterruptible(reason = REASON)
         public void setGpReturn(Pointer data, long gpReturn) {
             ((InterpreterDataAMD64) data).setAbiGpRet(gpReturn);
         }
 
         @Override
+        @Uninterruptible(reason = REASON)
         public long getFpReturn(Pointer data) {
             return ((InterpreterDataAMD64) data).getAbiFpRet();
         }
 
         @Override
+        @Uninterruptible(reason = REASON)
         public void setFpReturn(Pointer data, long fpReturn) {
             ((InterpreterDataAMD64) data).setAbiFpRet(fpReturn);
         }

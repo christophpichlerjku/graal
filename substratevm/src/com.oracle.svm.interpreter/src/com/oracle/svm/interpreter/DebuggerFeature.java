@@ -467,6 +467,10 @@ public class DebuggerFeature implements InternalFeature {
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
+
+        for (InterpreterResolvedJavaMethod interpreterMethod : iUniverse.getMethods()) {
+            interpreterMethod.setCompiledSignature(InterpreterStubSection.fromSignature(interpreterMethod));
+        }
     }
 
     @Override

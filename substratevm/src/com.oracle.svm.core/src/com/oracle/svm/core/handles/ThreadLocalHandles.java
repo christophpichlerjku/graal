@@ -26,12 +26,15 @@ package com.oracle.svm.core.handles;
 
 import java.util.Arrays;
 
+import com.oracle.svm.core.util.VMError;
 import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.ObjectHandle;
 import org.graalvm.word.SignedWord;
 
 import com.oracle.svm.core.NeverInline;
 import com.oracle.svm.core.Uninterruptible;
+
+import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 /**
  * Implementation of local object handles, which are bound to a specific thread and can be created
@@ -69,6 +72,7 @@ public final class ThreadLocalHandles<T extends ObjectHandle> {
         return (int) handle.rawValue();
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int getHandleCount() {
         return top - MIN_VALUE;
     }
@@ -80,6 +84,21 @@ public final class ThreadLocalHandles<T extends ObjectHandle> {
         frameStack[frameCount] = top;
         frameCount++;
         ensureCapacity(capacity);
+        return frameCount;
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public int pushFrameFast(int capacity) {
+        if (frameCount == frameStack.length) {
+            VMError.shouldNotReachHere("cannot grow");
+        }
+        frameStack[frameCount] = top;
+        frameCount++;
+
+        int minLength = top + capacity;
+        if (minLength >= objects.length) {
+            VMError.shouldNotReachHere("cannot ensure capacity");
+        }
         return frameCount;
     }
 
@@ -102,7 +121,7 @@ public final class ThreadLocalHandles<T extends ObjectHandle> {
     @SuppressWarnings("unchecked")
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public T tryCreateNonNull(Object obj) {
-        assert obj != null;
+        VMError.guarantee(obj != null);
         if (top >= objects.length) {
             return nullHandle();
         }
@@ -129,15 +148,18 @@ public final class ThreadLocalHandles<T extends ObjectHandle> {
         popFramesIncluding(frameCount);
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "just wanna have fun.", mayBeInlined = true, calleeMustBe = false)
     public void popFramesIncluding(int frame) {
-        assert frame > 0 && frame <= frameCount;
+        popAssert(frame);
         int previousTop = top;
         frameCount = frame - 1;
         top = frameStack[frameCount];
         for (int i = top; i < previousTop; i++) {
             objects[i] = null; // so objects can be garbage collected
         }
+    }
+    private void popAssert(int frame) {
+        VMError.guarantee(frame > 0 && frame <= frameCount, "invalid frame index: " + frame + " vs. " + frameCount);
     }
 
     public void ensureCapacity(int capacity) {

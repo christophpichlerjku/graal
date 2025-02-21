@@ -35,7 +35,22 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.graal.code.CompiledArgumentType;
+import com.oracle.svm.core.graal.code.SubstrateCallingConventionKind;
+import com.oracle.svm.core.handles.ThreadLocalHandles;
+import com.oracle.svm.core.log.Log;
+import com.oracle.svm.core.threadlocal.FastThreadLocalFactory;
+import com.oracle.svm.core.threadlocal.FastThreadLocalObject;
+import com.oracle.svm.interpreter.metadata.CompiledSignature;
+import com.oracle.svm.interpreter.metadata.InterpreterUniverse;
+import com.oracle.svm.interpreter.metadata.InterpreterUnresolvedSignature;
+import jdk.vm.ci.code.CallingConvention;
+import jdk.vm.ci.code.StackSlot;
+import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.JavaType;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.ObjectHandle;
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.impl.UnmanagedMemorySupport;
@@ -50,8 +65,6 @@ import com.oracle.svm.core.SubstrateTargetDescription;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.graal.code.InterpreterAccessStubData;
-import com.oracle.svm.core.graal.code.SubstrateCallingConventionKind;
-import com.oracle.svm.core.graal.code.SubstrateCallingConventionType;
 import com.oracle.svm.core.graal.meta.KnownOffsets;
 import com.oracle.svm.core.jdk.InternalVMMethod;
 import com.oracle.svm.core.util.VMError;
@@ -60,19 +73,17 @@ import com.oracle.svm.hosted.image.NativeImage;
 import com.oracle.svm.hosted.image.RelocatableBuffer;
 import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
-import com.oracle.svm.interpreter.metadata.InterpreterUnresolvedSignature;
 
 import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.word.Word;
-import jdk.vm.ci.code.CallingConvention;
 import jdk.vm.ci.code.RegisterConfig;
 import jdk.vm.ci.code.ValueKindFactory;
-import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
+import org.graalvm.word.PointerBase;
+import org.graalvm.word.WordFactory;
 
 @InternalVMMethod
 public abstract class InterpreterStubSection {
@@ -85,6 +96,36 @@ public abstract class InterpreterStubSection {
     private ObjectFile.ProgbitsSectionImpl stubsBufferImpl;
 
     private final Map<InterpreterResolvedJavaMethod, Integer> enterTrampolineOffsets = new HashMap<>();
+
+    public static CompiledSignature fromSignature(InterpreterResolvedJavaMethod interpreterMethod) {
+        InterpreterUnresolvedSignature signature = interpreterMethod.getSignature();
+        boolean hasReceiver = interpreterMethod.hasReceiver();
+        InterpreterStubSection stubSection = ImageSingletons.lookup(InterpreterStubSection.class);
+        int count = signature.getParameterCount(false);
+        CompiledArgumentType[] argumentTypes = new CompiledArgumentType[count + (hasReceiver ? 1 : 0)];
+
+        var kind = SubstrateCallingConventionKind.Java.toType(true);
+        ResolvedJavaType accessingClass = interpreterMethod.getDeclaringClass();
+        JavaType thisType = interpreterMethod.hasReceiver() ? accessingClass : null;
+        JavaType returnType = signature.getReturnType(accessingClass);
+        CallingConvention callingConvention = stubSection.registerConfig.getCallingConvention(kind, returnType, signature.toParameterTypes(thisType), stubSection.valueKindFactory);
+
+        if (hasReceiver) {
+            argumentTypes[0] = new CompiledArgumentType(JavaKind.Object, 0, true);
+        }
+        for (int i = 0; i < count; i++) {
+            int index = i + (hasReceiver ? 1 : 0);
+            AllocatableValue allocatableValue = callingConvention.getArgument(index);
+            JavaKind argKind = signature.getParameterKind(i);
+            int offset = 0;
+            if (allocatableValue instanceof StackSlot stackSlot) {
+                offset = stackSlot.getOffset(0);
+            }
+            CompiledArgumentType compiledArgumentType = new CompiledArgumentType(argKind, offset, !(allocatableValue instanceof StackSlot));
+            argumentTypes[index] = compiledArgumentType;
+        }
+        return new CompiledSignature(signature.getReturnKind(), argumentTypes, callingConvention.getStackSize());
+    }
 
     public void createInterpreterEnterStubSection(AbstractImage image, Collection<InterpreterResolvedJavaMethod> methods) {
         ObjectFile objectFile = image.getObjectFile();
@@ -152,97 +193,96 @@ public abstract class InterpreterStubSection {
 
     protected abstract void markEnterStubPatch(ObjectFile.ProgbitsSectionImpl pltBuffer, ResolvedJavaMethod enterStub);
 
+
+    @SuppressWarnings("rawtypes") //
+    public static final FastThreadLocalObject<ThreadLocalHandles> TL_HANDLES = FastThreadLocalFactory.createObject(ThreadLocalHandles.class, "Interpreter handles for enter stub");
+
+    interface InterpreterHandle extends ObjectHandle, PointerBase {
+    }
+
+    /* must match the maximum references passed via registers (AArch64 is the highest) */
+    public final static int MAX_HANDLES = 8;
+
     @Deoptimizer.DeoptStub(stubType = Deoptimizer.StubType.InterpreterEnterStub)
     @NeverInline("needs ABI boundary")
+    @Uninterruptible(reason = "stack frame contains object references that are not known to the GC")
     public static Pointer enterInterpreterStub(int interpreterMethodESTOffset, Pointer enterData) {
         InterpreterAccessStubData accessHelper = ImageSingletons.lookup(InterpreterAccessStubData.class);
-        InterpreterStubSection stubSection = ImageSingletons.lookup(InterpreterStubSection.class);
         DebuggerSupport interpreterSupport = ImageSingletons.lookup(DebuggerSupport.class);
+        VMError.guarantee(interpreterSupport != null);
+        //Log.log().string("[eis] #0").newline().flush();
 
-        InterpreterResolvedJavaMethod interpreterMethod = (InterpreterResolvedJavaMethod) interpreterSupport.getUniverse().getMethodForESTOffset(interpreterMethodESTOffset);
+        InterpreterUniverse interpreterUniverse = interpreterSupport.getUniverseOrNull();
+        VMError.guarantee(interpreterUniverse != null);
+        //Log.log().string("[eis] #1").newline().flush();
+
+        InterpreterResolvedJavaMethod interpreterMethod = (InterpreterResolvedJavaMethod) interpreterUniverse.getMethodForESTOffset(interpreterMethodESTOffset);
         VMError.guarantee(interpreterMethod != null);
+        //Log.log().string("[eis] #2").newline().flush();
 
-        InterpreterUnresolvedSignature signature = interpreterMethod.getSignature();
-        VMError.guarantee(signature != null);
+        CompiledSignature compiledSignature = interpreterMethod.getCompiledSignature();
+        VMError.guarantee(compiledSignature != null);
+        //Log.log().string("[eis] #3").newline().flush();
 
-        int count = signature.getParameterCount(false);
+        ThreadLocalHandles<InterpreterHandle> handles = TL_HANDLES.get();
+        VMError.guarantee(handles.getHandleCount() == 0);
+        handles.pushFrameFast(MAX_HANDLES - 1);
 
-        ResolvedJavaType accessingClass = interpreterMethod.getDeclaringClass();
-
-        JavaType thisType = interpreterMethod.hasReceiver() ? accessingClass : null;
-        JavaType returnType = signature.getReturnType(accessingClass);
-
-        var kind = SubstrateCallingConventionKind.Java.toType(true);
-        CallingConvention callingConvention = stubSection.registerConfig.getCallingConvention(kind, returnType, signature.toParameterTypes(thisType), stubSection.valueKindFactory);
-
-        InterpreterFrame frame = EspressoFrame.allocate(interpreterMethod.getMaxLocals(), interpreterMethod.getMaxStackSize(), new Object[0]);
-
-        int interpSlot = 0;
         int gpIdx = 0;
         int fpIdx = 0;
-        if (interpreterMethod.hasReceiver()) {
-            Object receiver = ((Pointer) Word.pointer(accessHelper.getGpArgumentAt(callingConvention.getArgument(gpIdx), enterData, gpIdx))).toObject();
-            setLocalObject(frame, 0, receiver);
-            gpIdx++;
-            interpSlot++;
-        }
+        int handleCount = 0;
+        for (int i = 0; i < compiledSignature.getCount(); i++)  {
+            CompiledArgumentType cArgType = compiledSignature.getCompiledArgumentTypes()[i];
+            if (cArgType.getKind() == JavaKind.Object && cArgType.isRegister()) {
+                // stack arguments are in the original stack layout, and thus the GC is aware of them.
+                // handles for references stored in registers are put in place of the reference instead, so no additional memory needs to be allocated.
 
-        for (int i = 0; i < count; i++) {
-            JavaKind argKind = signature.getParameterKind(i);
-            long arg;
-            AllocatableValue ccArg = callingConvention.getArgument(gpIdx + fpIdx);
-            switch (argKind) {
+                long rawAddr = accessHelper.getGpArgumentAt(cArgType, enterData, gpIdx);
+                Object obj = ((Pointer) Word.pointer(rawAddr)).toObject();
+                if (obj == null) {
+                    accessHelper.setGpArgumentAt(cArgType, enterData, gpIdx, 0L);
+                } else {
+                    InterpreterHandle interpreterHandle = handles.tryCreateNonNull(obj);
+                    accessHelper.setGpArgumentAt(cArgType, enterData, gpIdx, interpreterHandle.rawValue());
+                    handleCount++;
+                }
+            }
+
+            switch (cArgType.getKind()) {
                 case Float:
                 case Double:
-                    arg = accessHelper.getFpArgumentAt(ccArg, enterData, fpIdx);
                     fpIdx++;
                     break;
                 default:
-                    arg = accessHelper.getGpArgumentAt(ccArg, enterData, gpIdx);
                     gpIdx++;
                     break;
             }
-
-            switch (argKind) {
-                // @formatter:off
-                case Boolean: setLocalInt(frame, interpSlot,  (arg & 0xff) != 0 ? 1 : 0); break;
-                case Byte:    setLocalInt(frame, interpSlot, (byte) arg); break;
-                case Short:   setLocalInt(frame, interpSlot, (short) arg); break;
-                case Char:    setLocalInt(frame, interpSlot, (char) arg); break;
-                case Int:     setLocalInt(frame, interpSlot, (int) arg); break;
-                case Long:    setLocalLong(frame, interpSlot, arg); interpSlot++; break;
-                case Float:   setLocalFloat(frame, interpSlot, Float.intBitsToFloat((int) arg)); break;
-                case Double:  setLocalDouble(frame, interpSlot, Double.longBitsToDouble(arg)); interpSlot++; break;
-                case Object:  setLocalObject(frame, interpSlot, ((Pointer) Word.pointer(arg)).toObject()); break;
-                // @formatter:on
-                default:
-                    throw VMError.shouldNotReachHereAtRuntime();
-            }
-            interpSlot++;
         }
+        // Log.log().string("[eis] #5").newline().flush();
 
-        Object retVal = Interpreter.execute(interpreterMethod, frame);
+        Object retVal = enterInterpreterStub0(interpreterMethod, compiledSignature, enterData, handleCount);
+        // Log.log().string("[eis] #6").newline().flush();
 
-        switch (returnType.getJavaKind()) {
+        switch (compiledSignature.getReturnKind()) {
             case Boolean:
                 assert retVal instanceof Boolean;
                 accessHelper.setGpReturn(enterData, ((Boolean) retVal) ? 1 : 0);
                 break;
             case Byte:
                 assert retVal instanceof Byte;
-                accessHelper.setGpReturn(enterData, ((Byte) retVal).longValue());
+                accessHelper.setGpReturn(enterData, (long) ((Byte) retVal));
                 break;
             case Short:
                 assert retVal instanceof Short;
-                accessHelper.setGpReturn(enterData, ((Short) retVal).longValue());
+                accessHelper.setGpReturn(enterData, ((Short) retVal));
                 break;
             case Char:
                 assert retVal instanceof Character;
-                accessHelper.setGpReturn(enterData, ((Character) retVal).charValue());
+                accessHelper.setGpReturn(enterData, (long) ((Character) retVal));
                 break;
             case Int:
                 assert retVal instanceof Integer;
-                accessHelper.setGpReturn(enterData, ((Integer) retVal).longValue());
+                accessHelper.setGpReturn(enterData, (long) ((Integer) retVal));
                 break;
             case Long:
                 assert retVal instanceof Long;
@@ -267,26 +307,105 @@ public abstract class InterpreterStubSection {
         return enterData;
     }
 
+    @Uninterruptible(reason = "allow allocation now ", calleeMustBe = false)
+    private static Object enterInterpreterStub0(InterpreterResolvedJavaMethod interpreterMethod, CompiledSignature compiledSignature, Pointer enterData, int handleCount) {
+        return enterInterpreterStubCore(interpreterMethod, compiledSignature, enterData, handleCount);
+    }
+
+    @NeverInline("just debugging")
+    private static Object enterInterpreterStubCore(InterpreterResolvedJavaMethod interpreterMethod, CompiledSignature compiledSignature, Pointer enterData, int handleCount) {
+        InterpreterAccessStubData accessHelper = ImageSingletons.lookup(InterpreterAccessStubData.class);
+        InterpreterFrame frame = EspressoFrame.allocate(interpreterMethod.getMaxLocals(), interpreterMethod.getMaxStackSize(), new Object[0]);
+        CompiledArgumentType[] cArgsType = compiledSignature.getCompiledArgumentTypes();
+        int wordSize = ConfigurationValues.getTarget().wordSize;
+        int count = cArgsType.length;
+
+        int interpSlot = 0;
+        int gpIdx = 0;
+        int fpIdx = 0;
+
+        for (int i = 0; i < count; i++) {
+            long arg = 0;
+            CompiledArgumentType cArgType = cArgsType[gpIdx + fpIdx];
+            JavaKind argKind = cArgType.getKind();
+            switch (argKind) {
+                case Float:
+                case Double:
+                    arg = accessHelper.getFpArgumentAt(cArgType, enterData, fpIdx);
+                    fpIdx++;
+                    break;
+                case Object:
+                    Object val;
+                    arg = accessHelper.getGpArgumentAt(cArgType, enterData, gpIdx);
+                    if (cArgType.isRegister()) {
+                        /* reference in `enterData` has been replaced with a handle */
+                        InterpreterHandle handle = Word.pointer(arg);
+
+                        if (handle.rawValue() == 0L) {
+                            val = null;
+                        } else {
+                            val = TL_HANDLES.get().getObject(handle);
+                        }
+                    } else {
+                        // TODO: is there a race? I think not
+                        val = ((Pointer) Word.pointer(arg)).toObject();
+                    }
+                    setLocalObject(frame, interpSlot, val);
+
+                    gpIdx++;
+                    break;
+                default:
+                    arg = accessHelper.getGpArgumentAt(cArgType, enterData, gpIdx);
+                    gpIdx++;
+                    break;
+            }
+
+            switch (argKind) {
+                // @formatter:off
+                case Boolean: setLocalInt(frame, interpSlot,  (arg & 0xff) != 0 ? 1 : 0); break;
+                case Byte:    setLocalInt(frame, interpSlot, (byte) arg); break;
+                case Short:   setLocalInt(frame, interpSlot, (short) arg); break;
+                case Char:    setLocalInt(frame, interpSlot, (char) arg); break;
+                case Int:     setLocalInt(frame, interpSlot, (int) arg); break;
+                case Long:    setLocalLong(frame, interpSlot, arg); interpSlot++; break;
+                case Float:   setLocalFloat(frame, interpSlot, Float.intBitsToFloat((int) arg)); break;
+                case Double:  setLocalDouble(frame, interpSlot, Double.longBitsToDouble(arg)); interpSlot++; break;
+                case Object: /* already handled */ break;
+                // @formatter:on
+                default:
+                    throw VMError.shouldNotReachHereAtRuntime();
+            }
+            interpSlot++;
+        }
+
+        /* clear handles */
+        VMError.guarantee(TL_HANDLES.get().getHandleCount() == handleCount);
+        TL_HANDLES.get().popFrame();
+
+        return invokeInterpreterHelper(interpreterMethod, frame);
+    }
+
+    @Uninterruptible(reason = "No references on stack frame anymore", calleeMustBe = false)
+    private static Object invokeInterpreterHelper(InterpreterResolvedJavaMethod interpreterMethod, InterpreterFrame frame) {
+        return Interpreter.execute(interpreterMethod, frame);
+    }
+
     /*
      * reserve four slots for: 1. base address of outgoing stack args, 2. variable stack size, 3.
      * gcReferenceMap, 4. stack padding to match alignment
      */
     @Deoptimizer.DeoptStub(stubType = Deoptimizer.StubType.InterpreterLeaveStub)
     @NeverInline("needs ABI boundary")
+    @Uninterruptible(reason = "stay uninterruptible")
     @SuppressWarnings("unused")
     public static Pointer leaveInterpreterStub(CFunctionPointer entryPoint, Pointer leaveData, long stackSize, long gcReferenceMap) {
         return (Pointer) entryPoint;
     }
 
     public static Object leaveInterpreter(CFunctionPointer compiledEntryPoint, InterpreterResolvedJavaMethod seedMethod, ResolvedJavaType accessingClass, Object[] args) {
-        InterpreterUnresolvedSignature targetSignature = seedMethod.getSignature();
+        CompiledSignature compiledSignature = seedMethod.getCompiledSignature();
+        VMError.guarantee(compiledSignature != null);
         InterpreterStubSection stubSection = ImageSingletons.lookup(InterpreterStubSection.class);
-
-        JavaType thisType = seedMethod.hasReceiver() ? seedMethod.getDeclaringClass() : null;
-        SubstrateCallingConventionType kind = SubstrateCallingConventionKind.Java.toType(true);
-        JavaType returnType = targetSignature.getReturnType(accessingClass);
-
-        CallingConvention callingConvention = stubSection.registerConfig.getCallingConvention(kind, returnType, targetSignature.toParameterTypes(thisType), stubSection.valueKindFactory);
 
         InterpreterAccessStubData accessHelper = ImageSingletons.lookup(InterpreterAccessStubData.class);
         Pointer leaveData = StackValue.get(1, accessHelper.allocateStubDataSize());
@@ -295,12 +414,8 @@ public abstract class InterpreterStubSection {
         long gcReferenceMap = 0;
         int gpIdx = 0;
         int fpIdx = 0;
-        if (seedMethod.hasReceiver()) {
-            gcReferenceMap |= accessHelper.setGpArgumentAt(callingConvention.getArgument(gpIdx), leaveData, gpIdx, Word.objectToTrackedPointer(args[0]).rawValue());
-            gpIdx++;
-        }
 
-        int stackSize = NumUtil.roundUp(callingConvention.getStackSize(), stubSection.target.stackAlignment);
+        int stackSize = NumUtil.roundUp(compiledSignature.getStackSize(), stubSection.target.stackAlignment);
 
         Pointer stackBuffer = Word.nullPointer();
         if (stackSize > 0) {
@@ -308,48 +423,63 @@ public abstract class InterpreterStubSection {
             accessHelper.setSp(leaveData, stackSize, stackBuffer);
         }
 
-        int argCount = targetSignature.getParameterCount(false);
-        for (int i = 0; i < argCount; i++) {
-            Object arg = args[i + (seedMethod.hasReceiver() ? 1 : 0)];
+        try {
+            // GR-55022: Stack overflow check should be done here
+            return leaveInterpreter0(compiledEntryPoint, args, compiledSignature, gpIdx, fpIdx, accessHelper, leaveData, gcReferenceMap, stackSize, stackBuffer);
+        } catch (Throwable e) {
+            // native code threw exception, wrap it
+            throw SemanticJavaException.raise(e);
+        } finally {
+            if (stackSize > 0) {
+                VMError.guarantee(stackBuffer.isNonNull());
+                ImageSingletons.lookup(UnmanagedMemorySupport.class).free(stackBuffer);
+            }
+        }
+    }
 
-            AllocatableValue ccArg = callingConvention.getArgument(gpIdx + fpIdx);
-            JavaType type = targetSignature.getParameterType(i, accessingClass);
-            switch (type.getJavaKind()) {
+    @Uninterruptible(reason = "References are put on the stack which the GC is unaware of.")
+    private static Object leaveInterpreter0(CFunctionPointer compiledEntryPoint, Object[] args, CompiledSignature compiledSignature, int gpIdx, int fpIdx, InterpreterAccessStubData accessHelper, Pointer leaveData, long gcReferenceMap, int stackSize, Pointer stackBuffer) {
+        int argCount = compiledSignature.getCount();
+        for (int i = 0; i < argCount; i++) {
+            Object arg = args[i];
+            CompiledArgumentType cArgType = compiledSignature.getCompiledArgumentTypes()[gpIdx + fpIdx];
+            // Log.log().string("[li] arg=").signed(i).string(" with kind=").string(cArgType.getKind().toString()).string(", isRegister=").bool(cArgType.isRegister()).string(", offset=").signed(cArgType.getStackOffset()).newline().flush();
+            switch (cArgType.getKind()) {
                 case Boolean:
-                    accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, (boolean) arg ? 1 : 0);
+                    accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, (boolean) arg ? 1 : 0);
                     gpIdx++;
                     break;
                 case Byte:
-                    accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, (byte) arg);
+                    accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, (byte) arg);
                     gpIdx++;
                     break;
                 case Short:
-                    accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, (short) arg);
+                    accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, (short) arg);
                     gpIdx++;
                     break;
                 case Char:
-                    accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, (char) arg);
+                    accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, (char) arg);
                     gpIdx++;
                     break;
                 case Int:
-                    accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, (int) arg);
+                    accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, (int) arg);
                     gpIdx++;
                     break;
                 case Long:
-                    accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, (long) arg);
+                    accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, (long) arg);
                     gpIdx++;
                     break;
                 case Object:
-                    gcReferenceMap |= accessHelper.setGpArgumentAt(ccArg, leaveData, gpIdx, Word.objectToTrackedPointer(arg).rawValue());
+                    gcReferenceMap |= accessHelper.setGpArgumentAt(cArgType, leaveData, gpIdx, Word.objectToTrackedPointer(arg).rawValue());
                     gpIdx++;
                     break;
 
                 case Float:
-                    accessHelper.setFpArgumentAt(ccArg, leaveData, fpIdx, Float.floatToRawIntBits((float) arg));
+                    accessHelper.setFpArgumentAt(cArgType, leaveData, fpIdx, Float.floatToRawIntBits((float) arg));
                     fpIdx++;
                     break;
                 case Double:
-                    accessHelper.setFpArgumentAt(ccArg, leaveData, fpIdx, Double.doubleToRawLongBits((double) arg));
+                    accessHelper.setFpArgumentAt(cArgType, leaveData, fpIdx, Double.doubleToRawLongBits((double) arg));
                     fpIdx++;
                     break;
 
@@ -360,21 +490,10 @@ public abstract class InterpreterStubSection {
 
         VMError.guarantee(compiledEntryPoint.isNonNull());
 
-        try {
-            // GR-55022: Stack overflow check should be done here
-            leaveInterpreterStub(compiledEntryPoint, leaveData, stackSize, gcReferenceMap);
-        } catch (Throwable e) {
-            // native code threw exception, wrap it
-            throw SemanticJavaException.raise(e);
-        } finally {
-            if (stackSize > 0) {
-                VMError.guarantee(stackBuffer.isNonNull());
-                ImageSingletons.lookup(UnmanagedMemorySupport.class).free(stackBuffer);
-            }
-        }
+        leaveInterpreterStub(compiledEntryPoint, leaveData, stackSize, gcReferenceMap);
 
         // @formatter:off
-        return switch (returnType.getJavaKind()) {
+        return switch (compiledSignature.getReturnKind()) {
             case Boolean -> (accessHelper.getGpReturn(leaveData) & 0xff) != 0;
             case Byte    -> (byte) accessHelper.getGpReturn(leaveData);
             case Short   -> (short) accessHelper.getGpReturn(leaveData);

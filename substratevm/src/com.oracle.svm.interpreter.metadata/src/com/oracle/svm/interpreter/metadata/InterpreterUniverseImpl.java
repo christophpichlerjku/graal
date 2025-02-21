@@ -48,6 +48,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32C;
 
+import com.oracle.svm.core.Uninterruptible;
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import org.graalvm.nativeimage.Platform;
@@ -103,6 +104,9 @@ public final class InterpreterUniverseImpl implements InterpreterUniverse {
         this.types = List.copyOf(types);
         this.fields = List.copyOf(fields);
         this.methods = List.copyOf(methods);
+
+        /* force EST Offset Table creation.  Result is used in uninterruptible code. */
+        this.methodESTOffsetTable.get();
     }
 
     private static void consumeMagic(DataInput in) throws IOException {
@@ -360,8 +364,9 @@ public final class InterpreterUniverseImpl implements InterpreterUniverse {
     }
 
     @Override
-    public InterpreterResolvedJavaMethod getMethodForESTOffset(int methodIndex) {
-        InterpreterResolvedJavaMethod method = this.methodESTOffsetTable.get()[methodIndex];
+    @Uninterruptible(reason = Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public ResolvedJavaMethod getMethodForESTOffset(int methodIndex) {
+        InterpreterResolvedJavaMethod method = this.methodESTOffsetTable.getOrNull()[methodIndex];
         VMError.guarantee(method != null);
         return method;
     }

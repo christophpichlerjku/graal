@@ -24,27 +24,38 @@
  */
 package com.oracle.svm.core.graal.code;
 
-import jdk.vm.ci.meta.AllocatableValue;
+import com.oracle.svm.core.Uninterruptible;
 import org.graalvm.word.Pointer;
 
 /* Helper class to set ABI specific data */
 public interface InterpreterAccessStubData {
+    // TODO
+    String REASON = "reason";
+
     void setSp(Pointer data, int stackSize, Pointer stackBuffer);
 
-    long getGpArgumentAt(AllocatableValue ccArg, Pointer data, int pos);
+    @Uninterruptible(reason = REASON)
+    long getGpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos);
 
-    long setGpArgumentAt(AllocatableValue ccArg, Pointer data, int pos, long val);
+    @Uninterruptible(reason = REASON)
+    long setGpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos, long val);
 
-    long getFpArgumentAt(AllocatableValue ccArg, Pointer data, int pos);
+    @Uninterruptible(reason = REASON)
+    long getFpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos);
 
-    void setFpArgumentAt(AllocatableValue ccArg, Pointer data, int pos, long val);
+    @Uninterruptible(reason = REASON)
+    void setFpArgumentAt(CompiledArgumentType cArgType, Pointer data, int pos, long val);
 
+    @Uninterruptible(reason = REASON)
     long getGpReturn(Pointer data);
 
+    @Uninterruptible(reason = REASON)
     void setGpReturn(Pointer data, long gpReturn);
 
+    @Uninterruptible(reason = REASON)
     long getFpReturn(Pointer data);
 
+    @Uninterruptible(reason = REASON)
     void setFpReturn(Pointer data, long fpReturn);
 
     int allocateStubDataSize();

@@ -354,6 +354,7 @@ public final class Interpreter {
     }
 
     public static Object execute(InterpreterResolvedJavaMethod method, InterpreterFrame frame) {
+        // System.gc();
         return execute0(method, frame, false);
     }
 

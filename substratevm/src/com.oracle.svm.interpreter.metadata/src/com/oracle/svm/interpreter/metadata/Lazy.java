@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.interpreter.metadata;
 
+import com.oracle.svm.core.Uninterruptible;
+
 /**
  * Represents a lazily computed value. Ensures that a single thread runs the computation.
  */
@@ -62,6 +64,11 @@ public final class Lazy<T> {
             }
         }
         return localRef;
+    }
+
+    @Uninterruptible(reason = Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public T getOrNull() {
+        return ref;
     }
 
     /**

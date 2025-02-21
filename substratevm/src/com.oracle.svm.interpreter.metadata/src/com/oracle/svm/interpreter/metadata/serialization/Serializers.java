@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.function.IntFunction;
 import java.util.function.ToLongFunction;
 
+import com.oracle.svm.core.graal.code.CompiledArgumentType;
+import com.oracle.svm.interpreter.metadata.CompiledSignature;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
@@ -614,6 +616,32 @@ public final class Serializers {
                         context.writerFor(InterpreterResolvedJavaMethod[].class).write(context, out, value.vtable);
                     });
 
+    static final ValueSerializer<CompiledArgumentType> COMPILED_ARGUMENT_TYPE = createSerializer(
+            (context, in) -> {
+                JavaKind kind = context.readReference(in);
+                int offset = LEB128.readUnsignedInt(in);
+                boolean isRegister = in.readBoolean();
+                return new CompiledArgumentType(kind, offset, isRegister);
+            },
+            (context, out, value) -> {
+                context.writeReference(out, value.getKind());
+                LEB128.writeUnsignedInt(out, value.getStackOffset());
+                out.writeBoolean(value.isRegister());
+            });
+
+    static final ValueSerializer<CompiledSignature> COMPILED_SIGNATURE = createSerializer(
+                    (context, in) -> {
+                        JavaKind returnKind = context.readReference(in);
+                        CompiledArgumentType[] compiledArgumentTypes = context.readerFor(CompiledArgumentType[].class).read(context, in);
+                        int stackSize = in.readInt();
+                        return new CompiledSignature(returnKind, compiledArgumentTypes, stackSize);
+                    },
+                    (context, out, value) -> {
+                        context.writeReference(out, value.getReturnKind());
+                        context.writerFor(CompiledArgumentType[].class).write(context, out, value.getCompiledArgumentTypes());
+                        out.writeInt(value.getStackSize());
+                    });
+
     static final ValueSerializer<InterpreterResolvedJavaMethod> RESOLVED_METHOD = createSerializer(
                     (context, in) -> {
                         String name = context.readReference(in);
@@ -622,6 +650,7 @@ public final class Serializers {
                         int modifiers = LEB128.readUnsignedInt(in);
                         InterpreterResolvedObjectType declaringClass = context.readReference(in);
                         InterpreterUnresolvedSignature signature = context.readReference(in);
+                        CompiledSignature compiledSignature = context.readReference(in);
                         byte[] code = context.readReference(in);
                         ExceptionHandler[] exceptionHandlers = context.readReference(in);
                         LineNumberTable lineNumberTable = context.readReference(in);
@@ -633,7 +662,7 @@ public final class Serializers {
                         int enterStubOffset = LEB128.readUnsignedInt(in);
                         int methodId = LEB128.readUnsignedInt(in);
 
-                        return InterpreterResolvedJavaMethod.create(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, code, exceptionHandlers, lineNumberTable, localVariableTable,
+                        return InterpreterResolvedJavaMethod.create(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code, exceptionHandlers, lineNumberTable, localVariableTable,
                                         nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
                     },
                     (context, out, value) -> {
@@ -643,6 +672,8 @@ public final class Serializers {
                         int modifiers = value.getModifiers();
                         InterpreterResolvedObjectType declaringClass = value.getDeclaringClass();
                         InterpreterUnresolvedSignature signature = value.getSignature();
+                        CompiledSignature compiledSignature = value.getCompiledSignature();
+                        assert compiledSignature != null : "no compiled signature for " + value;
                         byte[] code = value.getInterpretedCode();
                         ExceptionHandler[] exceptionHandlers = value.getExceptionHandlers();
                         LineNumberTable lineNumberTable = value.getLineNumberTable();
@@ -664,6 +695,7 @@ public final class Serializers {
                         LEB128.writeUnsignedInt(out, modifiers);
                         context.writeReference(out, declaringClass);
                         context.writeReference(out, signature);
+                        context.writeReference(out, compiledSignature);
                         context.writeReference(out, code);
                         context.writeReference(out, exceptionHandlers);
                         context.writeReference(out, lineNumberTable);
@@ -723,6 +755,9 @@ public final class Serializers {
                     InterpreterResolvedPrimitiveType.class,
                     InterpreterResolvedObjectType.class,
                     InterpreterResolvedObjectType.VTableHolder.class,
+                    CompiledSignature.class,
+                    CompiledArgumentType.class,
+                    CompiledArgumentType[].class,
                     InterpreterResolvedJavaField.class,
                     FunctionPointerHolder.class,
                     InterpreterResolvedJavaMethod.class,
@@ -758,6 +793,9 @@ public final class Serializers {
                         .registerSerializer(InterpreterResolvedPrimitiveType.class, PRIMITIVE_TYPE)
                         .registerSerializer(InterpreterResolvedObjectType.class, OBJECT_TYPE)
                         .registerSerializer(InterpreterResolvedObjectType.VTableHolder.class, VTABLE_HOLDER)
+                        .registerSerializer(CompiledSignature.class, COMPILED_SIGNATURE)
+                        .registerSerializer(CompiledArgumentType[].class, ofReferenceArray(CompiledArgumentType[]::new))
+                        .registerSerializer(CompiledArgumentType.class, COMPILED_ARGUMENT_TYPE)
                         .registerSerializer(InterpreterResolvedJavaField.class, RESOLVED_FIELD)
                         .registerSerializer(FunctionPointerHolder.class, asReferenceConstant())
                         .registerSerializer(InterpreterResolvedJavaMethod.class, RESOLVED_METHOD)

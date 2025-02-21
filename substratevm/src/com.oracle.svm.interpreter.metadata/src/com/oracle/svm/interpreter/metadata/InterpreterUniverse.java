@@ -27,6 +27,7 @@ package com.oracle.svm.interpreter.metadata;
 import java.util.Collection;
 import java.util.OptionalInt;
 
+import com.oracle.svm.core.Uninterruptible;
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
@@ -58,6 +59,7 @@ public interface InterpreterUniverse {
 
     ResolvedJavaMethod getMethodAtIndex(int index);
 
+    @Uninterruptible(reason = Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     ResolvedJavaMethod getMethodForESTOffset(int methodIndex);
 
     ResolvedJavaMethod getMethodFromMethodId(int methodId);

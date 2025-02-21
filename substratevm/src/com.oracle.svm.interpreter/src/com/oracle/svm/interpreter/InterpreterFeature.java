@@ -32,6 +32,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import com.oracle.svm.core.thread.ThreadListenerSupport;
+import com.oracle.svm.interpreter.metadata.InterpreterResolvedJavaMethod;
 import org.graalvm.nativeimage.AnnotationAccess;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -171,6 +173,12 @@ public class InterpreterFeature implements InternalFeature {
         public void lower(LoweringTool tool) {
             replaceAtUsagesAndDelete(graph().unique(ConstantNode.forBoolean(false)));
         }
+    }
+
+    @Override
+    public void afterRegistration(AfterRegistrationAccess access) {
+        ThreadListenerSupport.get().register(new ThreadListenerThreadLocalHandlesAllocator());
+        InternalFeature.super.afterRegistration(access);
     }
 
     @Override

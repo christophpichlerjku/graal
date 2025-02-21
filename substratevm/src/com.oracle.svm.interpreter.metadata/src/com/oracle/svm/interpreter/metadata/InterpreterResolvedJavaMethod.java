@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.interpreter.metadata;
 
+import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 import static com.oracle.svm.interpreter.metadata.Bytecodes.BREAKPOINT;
 
 import java.lang.annotation.Annotation;
@@ -31,6 +32,9 @@ import java.lang.reflect.Type;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.oracle.svm.core.BuildPhaseProvider;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.heap.UnknownObjectField;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
@@ -85,6 +89,9 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     // Token set by the toggle of method enter/exit events.
     private volatile Object interpreterExecToken;
 
+    @UnknownObjectField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
+    private CompiledSignature compiledSignature;
+
     public static class InlinedBy {
         public InterpreterResolvedJavaMethod holder;
         public Set<InterpreterResolvedJavaMethod> inliners;
@@ -122,10 +129,10 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     // Only called during universe building
     @Platforms(Platform.HOSTED_ONLY.class)
     private InterpreterResolvedJavaMethod(ResolvedJavaMethod originalMethod, String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass,
-                    InterpreterUnresolvedSignature signature,
+                    InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
                     byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
                     ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
-        this(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, code, exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset,
+        this(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code, exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset,
                         enterStubOffset, methodId);
         this.originalMethod = originalMethod;
         this.needMethodBody = false;
@@ -133,6 +140,7 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     private InterpreterResolvedJavaMethod(String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass, InterpreterUnresolvedSignature signature,
+                    CompiledSignature compiledSignature,
                     byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
                     ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
         this.name = name;
@@ -141,6 +149,7 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
         this.modifiers = modifiers;
         this.declaringClass = declaringClass;
         this.signature = signature;
+        this.compiledSignature = compiledSignature;
         this.interpretedCode = code;
         this.exceptionHandlers = exceptionHandlers;
         this.lineNumberTable = lineNumberTable;
@@ -156,10 +165,10 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
 
     @VisibleForSerialization
     public static InterpreterResolvedJavaMethod create(String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass,
-                    InterpreterUnresolvedSignature signature,
+                    InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
                     byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
                     ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
-        return new InterpreterResolvedJavaMethod(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, code,
+        return new InterpreterResolvedJavaMethod(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code,
                         exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
     }
 
@@ -169,7 +178,8 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
                     InterpreterUnresolvedSignature signature,
                     byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
                     ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
-        return new InterpreterResolvedJavaMethod(originalMethod, name, maxLocals, maxStackSize, modifiers, declaringClass, signature, code,
+        CompiledSignature compiledSignature = null;
+        return new InterpreterResolvedJavaMethod(originalMethod, name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code,
                         exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
     }
 
@@ -253,11 +263,13 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     @Override
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int getMaxLocals() {
         return maxLocals;
     }
 
     @Override
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     public int getMaxStackSize() {
         return maxStackSize;
     }
@@ -478,6 +490,16 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
 
     public void setInterpreterExecToken(Object interpreterExecToken) {
         this.interpreterExecToken = interpreterExecToken;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void setCompiledSignature(CompiledSignature compiledSignature) {
+        this.compiledSignature = compiledSignature;
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public CompiledSignature getCompiledSignature() {
+        return compiledSignature;
     }
 
     // region Unimplemented methods

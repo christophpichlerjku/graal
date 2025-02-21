@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.oracle.svm.core.log.Log;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordBase;
@@ -177,6 +178,7 @@ final class InterpreterDirectivesSupportImpl implements InterpreterDirectivesSup
     public Object callIntoUnknown(Object method, Object... args) {
         InterpreterResolvedJavaMethod interpreterMethod = getInterpreterMethod(method);
         MethodPointer calleeFtnPtr = interpreterMethod.getNativeEntryPoint();
+        // Log.log().string("[callIntoUnknown] #1").newline().flush();
         return InterpreterStubSection.leaveInterpreter(calleeFtnPtr, interpreterMethod, interpreterMethod.getDeclaringClass(), args);
     }
 
