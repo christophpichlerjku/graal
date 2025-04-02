@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
+import com.oracle.svm.core.graal.phases.CollectFeatureOfMethodsPhase;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.Pair;
 import org.graalvm.nativeimage.ImageInfo;
@@ -1540,6 +1541,8 @@ public class NativeImageGenerator {
             highTier.prependPhase(new RemoveUnwindPhase());
             highTier.prependPhase(new DeadStoreRemovalPhase());
         }
+
+        highTier.appendPhase(new CollectFeatureOfMethodsPhase());
 
         lowTier.addBeforeLast(new OptimizeExceptionPathsPhase());
 

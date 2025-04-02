@@ -378,6 +378,7 @@ public class DebuggerFeature implements InternalFeature {
     @Override
     public void beforeCompilation(BeforeCompilationAccess access) {
         FeatureImpl.BeforeCompilationAccessImpl accessImpl = (FeatureImpl.BeforeCompilationAccessImpl) access;
+
         HostedUniverse hUniverse = accessImpl.getUniverse();
         HostedMetaAccess hMetaAccess = accessImpl.getMetaAccess();
         MetaAccessProvider aMetaAccess = hMetaAccess.getWrapped();
@@ -526,7 +527,8 @@ public class DebuggerFeature implements InternalFeature {
                 CompileTask task = accessImpl.getCompilations().get(hostedMethod);
                 int bytecodeSize = task.result.getBytecodeSize();
 
-                String methodString = String.format("%s::%s::%d", interpreterMethod.getDeclaringClass().getName(), interpreterMethod.getName(), bytecodeSize);
+                int loopCount = interpreterMethod.getFeatureLoopCount();
+                String methodString = String.format("%s::%s::%d::%d", interpreterMethod.getDeclaringClass().getName(), interpreterMethod.getName(), bytecodeSize, loopCount);
                 interpretableMethods.add(methodString);
             }
 

@@ -92,6 +92,17 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @UnknownObjectField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
     private CompiledSignature compiledSignature;
 
+    @Platforms(Platform.HOSTED_ONLY.class)
+    private int loopCount;
+
+    public void setFeatureLoopCount(int loopCount) {
+        this.loopCount = loopCount;
+    }
+
+    public int getFeatureLoopCount() {
+        return loopCount;
+    }
+
     public static class InlinedBy {
         public InterpreterResolvedJavaMethod holder;
         public Set<InterpreterResolvedJavaMethod> inliners;

@@ -113,4 +113,15 @@ public final class InterpreterSupportImpl extends InterpreterSupport {
             ImageSingletons.lookup(DebuggerSupport.class).buildMethodIdMapping(encodedMethods);
         }
     }
+
+    @Override
+    public void trackLoopCount(ResolvedJavaMethod method, int loopCount) {
+        if (InterpreterOptions.DebuggerWithInterpreter.getValue()) {
+            InterpreterResolvedJavaMethod interpreterResolvedJavaMethod = BuildTimeInterpreterUniverse.singleton().getMethod(method);
+            /* can be null e.g. for snippets */
+            if (interpreterResolvedJavaMethod != null) {
+                interpreterResolvedJavaMethod.setFeatureLoopCount(loopCount);
+            }
+        }
+    }
 }
