@@ -773,7 +773,8 @@ class LogStartupHook implements RuntimeSupport.Hook {
     class Result {
         String[] methods = new String[4];
         String[] classes = new String[4];
-        int[] sizes = new int[4];
+        int[] bcSizes = new int[4];
+        int[] targetSizes = new int[4];
         int length;
     }
 
@@ -818,15 +819,17 @@ class LogStartupHook implements RuntimeSupport.Hook {
             BufferedReader r = new BufferedReader(new FileReader(new File(path)));
             for (String line = r.readLine(); line != null; line = r.readLine()) {
                 String[] spl = line.split("::");
-                if (spl.length == 3) {
+                if (spl.length >= 4) {
                     if (result.length >= result.classes.length) {
                         result.classes = Arrays.copyOf(result.classes, result.length * 2);
                         result.methods = Arrays.copyOf(result.methods, result.length * 2);
-                        result.sizes = Arrays.copyOf(result.sizes, result.length * 2);
+                        result.bcSizes = Arrays.copyOf(result.bcSizes, result.length * 2);
+                        result.targetSizes = Arrays.copyOf(result.targetSizes, result.length * 2);
                     }
                     result.classes[result.length] = spl[0];
                     result.methods[result.length] = spl[1];
-                    result.sizes[result.length] = Integer.parseInt(spl[2]);
+                    result.bcSizes[result.length] = Integer.parseInt(spl[2]);
+                    result.targetSizes[result.length] = Integer.parseInt(spl[3]);
                     result.length++;
                 }
             }
