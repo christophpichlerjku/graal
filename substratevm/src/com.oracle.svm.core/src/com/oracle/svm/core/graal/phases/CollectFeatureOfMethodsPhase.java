@@ -26,6 +26,8 @@ package com.oracle.svm.core.graal.phases;
 
 import com.oracle.svm.core.interpreter.InterpreterSupport;
 
+import jdk.graal.compiler.graph.Node;
+import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
 import jdk.graal.compiler.nodes.LoopBeginNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.phases.BasePhase;
@@ -37,5 +39,24 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext>  {
     protected void run(StructuredGraph graph, HighTierContext context) {
         int loopCount = graph.getNodes(LoopBeginNode.TYPE).count();
         InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount);
+
+        graph.getNodes(InvokeWithExceptionNode.TYPE).count();
+
+
+        for (LoopBeginNode loopBeginNode : graph.getNodes(LoopBeginNode.TYPE)) {
+            int nestingLevel = countLoopBegins(loopBeginNode);
+        }
+    }
+
+    private static int countLoopBegins(LoopBeginNode loopBeginNode) {
+        int count = 0;
+        Node prev = loopBeginNode.predecessor();
+        while (prev != null) {
+            if (prev instanceof LoopBeginNode) {
+                count++;
+            }
+            prev = prev.predecessor();
+        }
+        return count;
     }
 }
