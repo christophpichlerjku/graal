@@ -526,9 +526,9 @@ public class DebuggerFeature implements InternalFeature {
 
                 CompileTask task = accessImpl.getCompilations().get(hostedMethod);
                 int bytecodeSize = task.result.getBytecodeSize();
-
+                int targetcodeSize = task.result.getTargetCodeSize();
                 int loopCount = interpreterMethod.getFeatureLoopCount();
-                String methodString = String.format("%s::%s::%d::%d", interpreterMethod.getDeclaringClass().getName(), interpreterMethod.getName(), bytecodeSize, loopCount);
+                String methodString = String.format("%s::%s::%d::%d::%d", interpreterMethod.getDeclaringClass().getName(), interpreterMethod.getName(), bytecodeSize, targetcodeSize, loopCount);
                 interpretableMethods.add(methodString);
             }
 
@@ -775,6 +775,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
         String[] classes = new String[4];
         int[] bcSizes = new int[4];
         int[] targetSizes = new int[4];
+        int[] loopCounts = new int[4];
         int length;
     }
 
@@ -819,17 +820,19 @@ class LogStartupHook implements RuntimeSupport.Hook {
             BufferedReader r = new BufferedReader(new FileReader(new File(path)));
             for (String line = r.readLine(); line != null; line = r.readLine()) {
                 String[] spl = line.split("::");
-                if (spl.length >= 4) {
+                if (spl.length >= 5) {
                     if (result.length >= result.classes.length) {
                         result.classes = Arrays.copyOf(result.classes, result.length * 2);
                         result.methods = Arrays.copyOf(result.methods, result.length * 2);
                         result.bcSizes = Arrays.copyOf(result.bcSizes, result.length * 2);
                         result.targetSizes = Arrays.copyOf(result.targetSizes, result.length * 2);
+                        result.loopCounts = Arrays.copyOf(result.loopCounts, result.length * 2);
                     }
                     result.classes[result.length] = spl[0];
                     result.methods[result.length] = spl[1];
                     result.bcSizes[result.length] = Integer.parseInt(spl[2]);
                     result.targetSizes[result.length] = Integer.parseInt(spl[3]);
+                    result.loopCounts[result.length] = Integer.parseInt(spl[4]);
                     result.length++;
                 }
             }
