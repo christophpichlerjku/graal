@@ -33,19 +33,22 @@ import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.phases.BasePhase;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
 
-public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext>  {
+public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 
     @Override
     protected void run(StructuredGraph graph, HighTierContext context) {
         int loopCount = graph.getNodes(LoopBeginNode.TYPE).count();
-        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount);
 
-        graph.getNodes(InvokeWithExceptionNode.TYPE).count();
+        int nCalls = graph.getNodes(InvokeWithExceptionNode.TYPE).count();
 
-
+        int maxNestingLevel = 0;
         for (LoopBeginNode loopBeginNode : graph.getNodes(LoopBeginNode.TYPE)) {
             int nestingLevel = countLoopBegins(loopBeginNode);
+            if (nestingLevel > maxNestingLevel) {
+                maxNestingLevel = nestingLevel;
+            }
         }
+        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount, maxNestingLevel, nCalls);
     }
 
     private static int countLoopBegins(LoopBeginNode loopBeginNode) {

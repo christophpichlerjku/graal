@@ -161,6 +161,7 @@ import com.oracle.svm.core.heap.RestrictHeapAccessCallees;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.image.ImageHeapLayouter;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.interpreter.InterpreterSupport;
 import com.oracle.svm.core.jdk.ServiceCatalogSupport;
 import com.oracle.svm.core.layeredimagesingleton.LayeredImageSingletonSupport;
 import com.oracle.svm.core.option.HostedOptionValues;
@@ -1541,8 +1542,9 @@ public class NativeImageGenerator {
             highTier.prependPhase(new RemoveUnwindPhase());
             highTier.prependPhase(new DeadStoreRemovalPhase());
         }
-
-        highTier.appendPhase(new CollectFeatureOfMethodsPhase());
+        if (ImageSingletons.contains(InterpreterSupport.class)) {
+            highTier.appendPhase(new CollectFeatureOfMethodsPhase());
+        }
 
         lowTier.addBeforeLast(new OptimizeExceptionPathsPhase());
 

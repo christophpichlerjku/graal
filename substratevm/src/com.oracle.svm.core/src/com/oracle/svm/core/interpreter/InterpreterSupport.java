@@ -92,7 +92,7 @@ public abstract class InterpreterSupport {
      * Determines if a given address is within the program code of the interpreter leave stub.
      *
      * Stackslot layout of leaveInterpreterStub:
-     * 
+     *
      * <pre>
      *     1. base address of outgoing stack args
      *     2. variable stack size
@@ -149,5 +149,5 @@ public abstract class InterpreterSupport {
     public abstract void buildMethodIdMapping(ResolvedJavaMethod[] encodedMethods);
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public abstract void trackLoopCount(ResolvedJavaMethod method, int loopCount);
+    public abstract void trackLoopCount(ResolvedJavaMethod method, int loopCount, int maxLoopNestingLevel, int nCalls);
 }

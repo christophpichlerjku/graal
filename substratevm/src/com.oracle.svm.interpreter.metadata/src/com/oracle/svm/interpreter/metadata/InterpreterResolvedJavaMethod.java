@@ -92,15 +92,41 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @UnknownObjectField(availability = BuildPhaseProvider.ReadyForCompilation.class) //
     private CompiledSignature compiledSignature;
 
-    @Platforms(Platform.HOSTED_ONLY.class)
+    @Platforms(Platform.HOSTED_ONLY.class) //
     private int loopCount;
+    @Platforms(Platform.HOSTED_ONLY.class) //
+    private int maxLoopNestingLevel;
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    private int nCalls;
 
+    @Platforms(Platform.HOSTED_ONLY.class)//
     public void setFeatureLoopCount(int loopCount) {
         this.loopCount = loopCount;
     }
 
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public void setFeatureMaxLoopNestingLevel(int maxLoopNestingLevel) {
+        this.maxLoopNestingLevel = maxLoopNestingLevel;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public void setFeatureNCalls(int nCalls) {
+        this.nCalls = nCalls;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
     public int getFeatureLoopCount() {
         return loopCount;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public int getFeatureMaxLoopNestingLevel() {
+        return maxLoopNestingLevel;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public int getFeatureNCalls() {
+        return nCalls;
     }
 
     public static class InlinedBy {
@@ -143,7 +169,8 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
                     InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
                     byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
                     ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
-        this(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code, exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset,
+        this(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code, exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex,
+                        gotOffset,
                         enterStubOffset, methodId);
         this.originalMethod = originalMethod;
         this.needMethodBody = false;

@@ -525,11 +525,11 @@ public class DebuggerFeature implements InternalFeature {
                 interpreterMethod.setNativeEntryPoint(new MethodPointer(interpreterMethod.getOriginalMethod()));
 
                 CompileTask task = accessImpl.getCompilations().get(hostedMethod);
-                int bytecodeSize = task.result.getBytecodeSize();
-                int targetcodeSize = task.result.getTargetCodeSize();
-                int loopCount = interpreterMethod.getFeatureLoopCount();
-                String methodString = String.format("%s::%s::%d::%d::%d", interpreterMethod.getDeclaringClass().getName(), interpreterMethod.getName(), bytecodeSize, targetcodeSize, loopCount);
-                interpretableMethods.add(methodString);
+                String className = interpreterMethod.getDeclaringClass().getName();
+                String methodName = interpreterMethod.getName();
+                CompilationUnitInformation info = new CompilationUnitInformation(className, methodName, task.result.getBytecodeSize(), task.result.getTargetCodeSize(),
+                                interpreterMethod.getFeatureLoopCount(), interpreterMethod.getFeatureMaxLoopNestingLevel(), interpreterMethod.getFeatureNCalls());
+                interpretableMethods.add(info.toFileString());
             }
 
             if (!interpreterMethod.isStatic() && !interpreterMethod.isConstructor()) {
@@ -769,16 +769,41 @@ public class DebuggerFeature implements InternalFeature {
     }
 }
 
-class LogStartupHook implements RuntimeSupport.Hook {
-    class Result {
-        String[] methods = new String[4];
-        String[] classes = new String[4];
-        int[] bcSizes = new int[4];
-        int[] targetSizes = new int[4];
-        int[] loopCounts = new int[4];
-        int length;
+record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount, int maxLoopNestingLevel, int nCalls) {
+
+    static final String BYTE_CODE_SIZE = "bcSize";
+    static final String TARGET_SIZE = "targetSize";
+    static final String LOOP_COUNT = "loops";
+    static final String MAX_LOOP_NESTING_LEVEL = "maxLoopNestingLevel";
+    static final String N_CALLS = "nCalls";
+
+    static CompilationUnitInformation parse(String line) {
+        String[] splitted = line.split(" ");
+        String[] classMethod = splitted[0].split("::");
+        if (classMethod.length != 2) {
+            return null;
+        }
+        int bytecodeSize = Integer.parseInt(splitted[1].split("=")[1]);
+        int targetCodeSize = Integer.parseInt(splitted[2].split("=")[1]);
+        int loopCount = Integer.parseInt(splitted[3].split("=")[1]);
+        int maxLoopNestingLevel = Integer.parseInt(splitted[4].split("=")[1]);
+        int nCalls = Integer.parseInt(splitted[5].split("=")[1]);
+        return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, maxLoopNestingLevel, nCalls);
+
     }
 
+    String toFileString() {
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d", //
+                        clazz, method,//
+                        BYTE_CODE_SIZE, bytecodeSize,//
+                        TARGET_SIZE, targetCodeSize,//
+                        LOOP_COUNT, loopCount,//
+                        MAX_LOOP_NESTING_LEVEL, maxLoopNestingLevel,//
+                        N_CALLS, nCalls);
+    }
+}
+
+class LogStartupHook implements RuntimeSupport.Hook {
     @Override
     public void execute(boolean isFirstIsolate) {
         final String path = InterpreterOptions.HybridSpecification.getValue();
@@ -791,12 +816,12 @@ class LogStartupHook implements RuntimeSupport.Hook {
         long count = 0;
         long savedCodeSize = 0;
         long totalCodeSize = 0;
-        final Result result = parseResult(path);
+        final CompilationUnitInformation[] result = parseResult(path);
 
         for (ResolvedJavaMethod m : universe.getMethods()) {
             for (int i = 0; i < result.length; i++) {
-                boolean methodMatch = "*".equals(result.methods[i]) || m.getName().equals(result.methods[i]);
-                boolean classNameMatch = "*".equals(result.classes[i]) || m.getDeclaringClass().getName().equals(result.classes[i]);
+                boolean methodMatch = "*".equals(result[i].method()) || m.getName().equals(result[i].method());
+                boolean classNameMatch = "*".equals(result[i].clazz()) || m.getDeclaringClass().getName().equals(result[i].clazz());
                 if (methodMatch && classNameMatch) {
                     InterpreterDirectives.ensureInterpreterExecution(m);
                     savedCodeSize += m.getCodeSize();
@@ -805,42 +830,34 @@ class LogStartupHook implements RuntimeSupport.Hook {
             }
             totalCodeSize += m.getCodeSize();
         }
-        printInformation(count, universe.getMethods().size(), "methods set to managed execution");
+        printInformation(count, universe.getMethods().size(), "compilation units set to managed execution");
         printInformation(savedCodeSize, totalCodeSize, "native image code size saved");
-        Log.log().string("Average method size: ").rational(totalCodeSize, universe.getMethods().size(), 1).newline();
+        Log.log().string("Average compilation unit size: ").rational(totalCodeSize, universe.getMethods().size(), 1).newline();
     }
 
     private static void printInformation(long part, long total, String text) {
         Log.log().number(part, 10, true).string(" of ").number(total, 10, true).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
     }
 
-    private Result parseResult(String path) {
-        Result result = new Result();
+    private static CompilationUnitInformation[] parseResult(String path) {
+        CompilationUnitInformation[] result = new CompilationUnitInformation[4];
+        int pos = 0;
         try {
             BufferedReader r = new BufferedReader(new FileReader(new File(path)));
             for (String line = r.readLine(); line != null; line = r.readLine()) {
-                String[] spl = line.split("::");
-                if (spl.length >= 5) {
-                    if (result.length >= result.classes.length) {
-                        result.classes = Arrays.copyOf(result.classes, result.length * 2);
-                        result.methods = Arrays.copyOf(result.methods, result.length * 2);
-                        result.bcSizes = Arrays.copyOf(result.bcSizes, result.length * 2);
-                        result.targetSizes = Arrays.copyOf(result.targetSizes, result.length * 2);
-                        result.loopCounts = Arrays.copyOf(result.loopCounts, result.length * 2);
+                CompilationUnitInformation info = CompilationUnitInformation.parse(line);
+                if (info != null) {
+                    if (pos >= result.length) {
+                        result = Arrays.copyOf(result, result.length * 2);
                     }
-                    result.classes[result.length] = spl[0];
-                    result.methods[result.length] = spl[1];
-                    result.bcSizes[result.length] = Integer.parseInt(spl[2]);
-                    result.targetSizes[result.length] = Integer.parseInt(spl[3]);
-                    result.loopCounts[result.length] = Integer.parseInt(spl[4]);
-                    result.length++;
+                    result[pos++] = info;
                 }
             }
             Log.log().number(result.length, 10, true).string(" methods found in spec file").newline();
         } catch (IOException e) {
             Log.log().string(e.getMessage()).newline();
         }
-        return result;
+        return Arrays.copyOf(result, pos);
     }
 
 }
