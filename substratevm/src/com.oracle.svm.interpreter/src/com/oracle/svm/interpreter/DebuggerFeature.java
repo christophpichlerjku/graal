@@ -55,6 +55,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.Pair;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -780,16 +781,32 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     static CompilationUnitInformation parse(String line) {
         String[] splitted = line.split(" ");
         String[] classMethod = splitted[0].split("::");
-        if (classMethod.length != 2) {
+        if (classMethod.length != 2 || splitted.length < 6) {
+            System.err.println(line);
             return null;
         }
-        int bytecodeSize = Integer.parseInt(splitted[1].split("=")[1]);
-        int targetCodeSize = Integer.parseInt(splitted[2].split("=")[1]);
-        int loopCount = Integer.parseInt(splitted[3].split("=")[1]);
-        int maxLoopNestingLevel = Integer.parseInt(splitted[4].split("=")[1]);
-        int nCalls = Integer.parseInt(splitted[5].split("=")[1]);
-        return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, maxLoopNestingLevel, nCalls);
+        try {
+            int bytecodeSize = Integer.parseInt(splitted[1].split("=")[1]);
+            int targetCodeSize = Integer.parseInt(splitted[2].split("=")[1]);
+            int loopCount = Integer.parseInt(splitted[3].split("=")[1]);
+            int maxLoopNestingLevel = Integer.parseInt(splitted[4].split("=")[1]);
+            int nCalls = Integer.parseInt(splitted[5].split("=")[1]);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, maxLoopNestingLevel, nCalls);
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.err.println(line);
+            e.printStackTrace();
+            throw e;
+        }
+    }
 
+    static Pair<String, String> parseOnlyClazzMethod(String line) {
+        String[] splitted = line.split(" ");
+        String[] classMethod = splitted[0].split("::");
+        if (classMethod.length != 2) {
+            System.err.println(line);
+            return null;
+        }
+        return Pair.create(classMethod[0], classMethod[1]);
     }
 
     String toFileString() {
@@ -816,12 +833,12 @@ class LogStartupHook implements RuntimeSupport.Hook {
         long count = 0;
         long savedCodeSize = 0;
         long totalCodeSize = 0;
-        final CompilationUnitInformation[] result = parseResult(path);
+        final Pair<String, String>[] result = parseResult(path);
 
         for (ResolvedJavaMethod m : universe.getMethods()) {
             for (int i = 0; i < result.length; i++) {
-                boolean methodMatch = "*".equals(result[i].method()) || m.getName().equals(result[i].method());
-                boolean classNameMatch = "*".equals(result[i].clazz()) || m.getDeclaringClass().getName().equals(result[i].clazz());
+                boolean methodMatch = "*".equals(result[i].getRight()) || m.getName().equals(result[i].getRight());
+                boolean classNameMatch = "*".equals(result[i].getLeft()) || m.getDeclaringClass().getName().equals(result[i].getLeft());
                 if (methodMatch && classNameMatch) {
                     InterpreterDirectives.ensureInterpreterExecution(m);
                     savedCodeSize += m.getCodeSize();
@@ -839,13 +856,14 @@ class LogStartupHook implements RuntimeSupport.Hook {
         Log.log().number(part, 10, true).string(" of ").number(total, 10, true).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
     }
 
-    private static CompilationUnitInformation[] parseResult(String path) {
-        CompilationUnitInformation[] result = new CompilationUnitInformation[4];
+    private static Pair<String, String>[] parseResult(String path) {
+        @SuppressWarnings("unchecked")
+        Pair<String, String>[] result = new Pair[4];
         int pos = 0;
         try {
             BufferedReader r = new BufferedReader(new FileReader(new File(path)));
             for (String line = r.readLine(); line != null; line = r.readLine()) {
-                CompilationUnitInformation info = CompilationUnitInformation.parse(line);
+                Pair<String, String> info = CompilationUnitInformation.parseOnlyClazzMethod(line);
                 if (info != null) {
                     if (pos >= result.length) {
                         result = Arrays.copyOf(result, result.length * 2);
