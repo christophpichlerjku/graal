@@ -95,7 +95,7 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @Platforms(Platform.HOSTED_ONLY.class) //
     private int loopCount;
     @Platforms(Platform.HOSTED_ONLY.class) //
-    private int maxLoopNestingLevel;
+    private double nEstimatedCycles;
     @Platforms(Platform.HOSTED_ONLY.class)//
     private int nCalls;
 
@@ -105,8 +105,8 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatureMaxLoopNestingLevel(int maxLoopNestingLevel) {
-        this.maxLoopNestingLevel = maxLoopNestingLevel;
+    public void setFeatureEstimatedCycles(double nEstimatedCycles) {
+        this.nEstimatedCycles = nEstimatedCycles;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
@@ -120,8 +120,8 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public int getFeatureMaxLoopNestingLevel() {
-        return maxLoopNestingLevel;
+    public double getFeatureEstimatedCycles() {
+        return nEstimatedCycles;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//

@@ -30,6 +30,8 @@ public interface InterpreterDirectivesSupport {
 
     boolean forceInterpreterExecution(Object method);
 
+    boolean isInterpreted(Object t, Object method);
+
     void resetInterpreterExecution(Object method);
 
     Object ensureInterpreterExecution(Object method);

@@ -30,6 +30,8 @@ import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
 import jdk.graal.compiler.nodes.LoopBeginNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.cfg.ControlFlowGraph;
+import jdk.graal.compiler.nodes.cfg.HIRBlock;
 import jdk.graal.compiler.phases.BasePhase;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
 
@@ -41,25 +43,29 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 
         int nCalls = graph.getNodes(InvokeWithExceptionNode.TYPE).count();
 
-        int maxNestingLevel = 0;
-        for (LoopBeginNode loopBeginNode : graph.getNodes(LoopBeginNode.TYPE)) {
-            int nestingLevel = countLoopBegins(loopBeginNode);
-            if (nestingLevel > maxNestingLevel) {
-                maxNestingLevel = nestingLevel;
-            }
-        }
-        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount, maxNestingLevel, nCalls);
+// double nEstimatedCycles = NodeCostUtil.computeGraphCycles(graph, true);
+        long nWeightedNodes = estimateNodeCount(graph);
+        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount, nWeightedNodes, nCalls);
     }
 
-    private static int countLoopBegins(LoopBeginNode loopBeginNode) {
-        int count = 0;
-        Node prev = loopBeginNode.predecessor();
-        while (prev != null) {
-            if (prev instanceof LoopBeginNode) {
-                count++;
+    private static long estimateNodeCount(StructuredGraph graph) {
+        long count = 0;
+        final int LOOP_FQ = 10;// currently a magic number
+        ControlFlowGraph cfg = ControlFlowGraph.newBuilder(graph).computeLoops(true).connectBlocks(true).build();
+        for (HIRBlock block : cfg.getBlocks()) {
+            int loopDepth = block.getLoopDepth();
+            for (@SuppressWarnings("unused")
+            Node node : block.getNodes()) {
+                count += Math.pow(LOOP_FQ, loopDepth);
             }
-            prev = prev.predecessor();
         }
+
+// for (Node node : graph.getNodes()) {
+// TODO PROBLEM: nodeToBlock map entry is null
+// int loopDepth = cfg.getNodeToBlock().get(node).getLoopDepth();
+// count += Math.pow(LOOP_FQ, loopDepth);
+// }
         return count;
     }
+
 }

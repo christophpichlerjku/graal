@@ -529,7 +529,7 @@ public class DebuggerFeature implements InternalFeature {
                 String className = interpreterMethod.getDeclaringClass().getName();
                 String methodName = interpreterMethod.getName();
                 CompilationUnitInformation info = new CompilationUnitInformation(className, methodName, task.result.getBytecodeSize(), task.result.getTargetCodeSize(),
-                                interpreterMethod.getFeatureLoopCount(), interpreterMethod.getFeatureMaxLoopNestingLevel(), interpreterMethod.getFeatureNCalls());
+                                interpreterMethod.getFeatureLoopCount(), interpreterMethod.getFeatureEstimatedCycles(), interpreterMethod.getFeatureNCalls());
                 interpretableMethods.add(info.toFileString());
             }
 
@@ -770,12 +770,13 @@ public class DebuggerFeature implements InternalFeature {
     }
 }
 
-record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount, int maxLoopNestingLevel, int nCalls) {
+record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount, double nEstimatedCycles, int nCalls) {
 
     static final String BYTE_CODE_SIZE = "bcSize";
     static final String TARGET_SIZE = "targetSize";
     static final String LOOP_COUNT = "loops";
     static final String MAX_LOOP_NESTING_LEVEL = "maxLoopNestingLevel";
+    static final String N_ESTIMATED_CYCLES = "nEstimatedCycles";
     static final String N_CALLS = "nCalls";
 
     static CompilationUnitInformation parse(String line) {
@@ -789,9 +790,9 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
             int bytecodeSize = Integer.parseInt(splitted[1].split("=")[1]);
             int targetCodeSize = Integer.parseInt(splitted[2].split("=")[1]);
             int loopCount = Integer.parseInt(splitted[3].split("=")[1]);
-            int maxLoopNestingLevel = Integer.parseInt(splitted[4].split("=")[1]);
+            double nEstimatedCycles = Double.parseDouble(splitted[4].split("=")[1]);
             int nCalls = Integer.parseInt(splitted[5].split("=")[1]);
-            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, maxLoopNestingLevel, nCalls);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, nCalls);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.err.println(line);
             e.printStackTrace();
@@ -810,12 +811,12 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     String toFileString() {
-        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d", //
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%f %s=%d", //
                         clazz, method,//
                         BYTE_CODE_SIZE, bytecodeSize,//
                         TARGET_SIZE, targetCodeSize,//
                         LOOP_COUNT, loopCount,//
-                        MAX_LOOP_NESTING_LEVEL, maxLoopNestingLevel,//
+                        N_ESTIMATED_CYCLES, nEstimatedCycles,//
                         N_CALLS, nCalls);
     }
 }
@@ -840,9 +841,13 @@ class LogStartupHook implements RuntimeSupport.Hook {
                 boolean methodMatch = "*".equals(result[i].getRight()) || m.getName().equals(result[i].getRight());
                 boolean classNameMatch = "*".equals(result[i].getLeft()) || m.getDeclaringClass().getName().equals(result[i].getLeft());
                 if (methodMatch && classNameMatch) {
-                    InterpreterDirectives.ensureInterpreterExecution(m);
-                    savedCodeSize += m.getCodeSize();
-                    count++;
+                    Object token = InterpreterDirectives.ensureInterpreterExecution(m);
+                    if (InterpreterDirectives.isInterpreted(token, m)) {
+                        savedCodeSize += m.getCodeSize();
+                        count++;
+                    } else {
+                        Log.log().string("Failed to interpret: ").number(i, 10, true).newline();
+                    }
                 }
             }
             totalCodeSize += m.getCodeSize();
@@ -871,7 +876,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
                     result[pos++] = info;
                 }
             }
-            Log.log().number(result.length, 10, true).string(" methods found in spec file").newline();
+            Log.log().number(pos, 10, true).string(" methods found in spec file").newline();
         } catch (IOException e) {
             Log.log().string(e.getMessage()).newline();
         }

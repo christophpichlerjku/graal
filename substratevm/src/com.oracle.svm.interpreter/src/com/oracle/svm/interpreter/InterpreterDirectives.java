@@ -82,6 +82,19 @@ public final class InterpreterDirectives {
     }
 
     /**
+     * Returns whether the given method is executed in the interpreter.
+     *
+     * @param method This is an interpreter method obtained via
+     *            {@link DebuggerSupport#lookupMethod(ResolvedJavaType, String, Class, Class[])}.
+     *
+     * @param token A token obtained via
+     *            {@link InterpreterDirectives#ensureInterpreterExecution(Object)}.
+     */
+    public static boolean isInterpreted(Object token, Object method) {
+        return ImageSingletons.lookup(InterpreterDirectivesSupport.class).isInterpreted(token, method);
+    }
+
+    /**
      * Undo operation for a given token.
      *
      * <it>Note:</it> Undo operations must be applied in first-in last-out order.

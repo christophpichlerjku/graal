@@ -34,13 +34,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.oracle.svm.core.log.Log;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordBase;
 
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.jdk.InternalVMMethod;
+import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.pltgot.GOTAccess;
 import com.oracle.svm.core.pltgot.GOTHeapSupport;
@@ -141,8 +141,21 @@ final class InterpreterDirectivesSupportImpl implements InterpreterDirectivesSup
 
         if (forceInterpreterExecution(interpreterMethod)) {
             token.changedExecutionState.add(0, interpreterMethod);
+// } else {
+// Log.log().string("No interpretation for method
+// ").string(interpreterMethod.getDeclaringClass().getName()).string("::").string(interpreterMethod.getName()).newline();
         }
         return token;
+    }
+
+    @Override
+    public boolean isInterpreted(Object t, Object m) {
+        InterpreterResolvedJavaMethod method = getInterpreterMethod(m);
+        if (t == null || method == null) {
+            return false;
+        }
+        InterpreterOpToken token = (InterpreterOpToken) t;
+        return token.valid && token.changedExecutionState.contains(method);
     }
 
     @Override

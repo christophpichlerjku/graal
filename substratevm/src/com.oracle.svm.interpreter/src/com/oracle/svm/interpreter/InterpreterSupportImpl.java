@@ -116,13 +116,13 @@ public final class InterpreterSupportImpl extends InterpreterSupport {
 
     @Platforms(Platform.HOSTED_ONLY.class)
     @Override
-    public void trackLoopCount(ResolvedJavaMethod method, int loopCount, int maxLoopNestingLevel, int nCalls) {
+    public void trackLoopCount(ResolvedJavaMethod method, int loopCount, double nEstimatedCycles, int nCalls) {
         if (InterpreterOptions.DebuggerWithInterpreter.getValue()) {
             InterpreterResolvedJavaMethod interpreterResolvedJavaMethod = BuildTimeInterpreterUniverse.singleton().getMethod(method);
             /* can be null e.g. for snippets */
             if (interpreterResolvedJavaMethod != null) {
                 interpreterResolvedJavaMethod.setFeatureLoopCount(loopCount);
-                interpreterResolvedJavaMethod.setFeatureMaxLoopNestingLevel(maxLoopNestingLevel);
+                interpreterResolvedJavaMethod.setFeatureEstimatedCycles(nEstimatedCycles);
                 interpreterResolvedJavaMethod.setFeatureNCalls(nCalls);
             }
         }
