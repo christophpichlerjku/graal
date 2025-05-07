@@ -149,16 +149,6 @@ final class InterpreterDirectivesSupportImpl implements InterpreterDirectivesSup
     }
 
     @Override
-    public boolean isInterpreted(Object t, Object m) {
-        InterpreterResolvedJavaMethod method = getInterpreterMethod(m);
-        if (t == null || method == null) {
-            return false;
-        }
-        InterpreterOpToken token = (InterpreterOpToken) t;
-        return token.valid && token.changedExecutionState.contains(method);
-    }
-
-    @Override
     public void undoExecutionOperation(Object t) {
         if (t == null) {
             return;

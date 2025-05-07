@@ -845,8 +845,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
                 boolean methodMatch = "*".equals(result[i].getRight()) || m.getName().equals(result[i].getRight());
                 boolean classNameMatch = "*".equals(result[i].getLeft()) || m.getDeclaringClass().getName().equals(result[i].getLeft());
                 if (methodMatch && classNameMatch) {
-                    Object token = InterpreterDirectives.ensureInterpreterExecution(m);
-                    if (InterpreterDirectives.isInterpreted(token, m)) {
+                    if (InterpreterDirectives.forceInterpreterExecution(m)) {
                         savedCodeSize += m.getCodeSize();
                         count++;
                     } else {
