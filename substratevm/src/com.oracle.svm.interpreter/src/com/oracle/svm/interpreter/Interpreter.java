@@ -266,6 +266,10 @@ import static com.oracle.svm.interpreter.metadata.Bytecodes.WIDE;
 
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.jdk.InternalVMMethod;
+import com.oracle.svm.core.jdk.UninterruptibleUtils;
+import com.oracle.svm.core.log.Log;
+import com.oracle.svm.core.threadlocal.FastThreadLocalFactory;
+import com.oracle.svm.core.threadlocal.FastThreadLocalLong;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.interpreter.debug.DebuggerEvents;
 import com.oracle.svm.interpreter.debug.EventKind;
@@ -294,6 +298,8 @@ import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.UnresolvedJavaType;
+
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Bytecode interpreter loop.
@@ -368,6 +374,9 @@ public final class Interpreter {
     }
 
     private static Object execute0(InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean stayInInterpreter) {
+        if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
+            openExecTimeTrack();
+        }
         try {
             if (method.isSynchronized()) {
                 Object lockTarget = method.isStatic()
@@ -380,10 +389,18 @@ public final class Interpreter {
             return Root.executeBodyFromBCI(frame, method, 0, startTop, stayInInterpreter);
         } finally {
             InterpreterToVM.releaseInterpreterFrameLocks(frame);
+            if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
+                closeExecTimeTrack();
+            }
         }
     }
 
     public static final ThreadLocal<Integer> logIndent = ThreadLocal.withInitial(() -> 0);
+
+    public static final FastThreadLocalLong timeTrackStart = FastThreadLocalFactory.createLong("interpreterTimeTrackStart");// hreadLocal.withInitial(() -> 0L);
+    public static final FastThreadLocalLong timeTrackSum = FastThreadLocalFactory.createLong("interpreterTimeTrackSum");
+
+    public static UninterruptibleUtils.AtomicLong timeTrackSumGlobal = new UninterruptibleUtils.AtomicLong(0);
 
     private static int getLogIndent() {
         if (InterpreterOptions.InterpreterTraceSupport.getValue()) {
@@ -462,6 +479,27 @@ public final class Interpreter {
                         .string(method.getSignature().toMethodDescriptor())
                         .string(" with bci=").unsigned(curBCI)
                         .string("/top=").unsigned(top).newline();
+    }
+
+
+    static void openExecTimeTrack() {
+        long cur = timeTrackStart.get();
+        if (cur != 0) {
+            Log.log().string("cur=").signed(cur).newline().flush();
+            VMError.guarantee(cur == 0);
+        }
+        timeTrackStart.set(System.nanoTime());
+    }
+
+    static void closeExecTimeTrack() {
+        long cur = timeTrackStart.get();
+        VMError.guarantee(cur != 0);
+
+        long sum = timeTrackSum.get();
+        sum += (System.nanoTime() - cur);
+        timeTrackSum.set(sum);
+
+        timeTrackStart.set(0L);
     }
 
     public static final class Root {

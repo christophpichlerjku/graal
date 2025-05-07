@@ -877,20 +877,27 @@ public final class InterpreterToVM {
                             .newline();
         }
 
-        Object retObj = null;
-        if (goThroughPLT) {
-            VMError.guarantee(!forceStayInInterpreter);
-            VMError.guarantee(calleeFtnPtr.isNonNull());
 
-            // wrapping of exceptions is done in leaveInterpreter
-            retObj = InterpreterStubSection.leaveInterpreter(calleeFtnPtr, targetMethod, targetMethod.getDeclaringClass(), calleeArgs);
-        } else {
-            try {
-                retObj = Interpreter.execute(targetMethod, calleeArgs, forceStayInInterpreter);
-            } catch (Throwable e) {
-                // Exceptions coming from calls are valid, semantic Java exceptions.
-                throw SemanticJavaException.raise(e);
+        Interpreter.closeExecTimeTrack();
+
+        Object retObj = null;
+        try {
+            if (goThroughPLT) {
+                VMError.guarantee(!forceStayInInterpreter);
+                VMError.guarantee(calleeFtnPtr.isNonNull());
+
+                // wrapping of exceptions is done in leaveInterpreter
+                retObj = InterpreterStubSection.leaveInterpreter(calleeFtnPtr, targetMethod, targetMethod.getDeclaringClass(), calleeArgs);
+            } else {
+                try {
+                    retObj = Interpreter.execute(targetMethod, calleeArgs, forceStayInInterpreter);
+                } catch (Throwable e) {
+                    // Exceptions coming from calls are valid, semantic Java exceptions.
+                    throw SemanticJavaException.raise(e);
+                }
             }
+        } finally {
+            Interpreter.openExecTimeTrack();
         }
 
         return retObj;

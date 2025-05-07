@@ -57,6 +57,9 @@ public class InterpreterOptions {
     // performance.
     @Option(help = "Include interpreter tracing code in image") public static final HostedOptionKey<Boolean> InterpreterTraceSupport = new HostedOptionKey<>(true);
 
+    @Option(help = "Track and print on shutdown time spent in interpreter", type = OptionType.Expert)//
+    public static final RuntimeOptionKey<Boolean> InterpreterTrackTimeSpent = new RuntimeOptionKey<>(false);
+
     @Option(help = "Trace Interpreter execution")//
     public static final RuntimeOptionKey<Boolean> InterpreterTrace = new RuntimeOptionKey<>(false);
 

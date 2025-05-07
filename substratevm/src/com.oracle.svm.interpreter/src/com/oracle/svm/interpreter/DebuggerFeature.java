@@ -54,6 +54,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.oracle.svm.core.thread.ThreadListenerSupport;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.Pair;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -192,6 +193,9 @@ public class DebuggerFeature implements InternalFeature {
     @Override
     public void duringSetup(DuringSetupAccess access) {
         RuntimeSupport.getRuntimeSupport().addStartupHook(new LogStartupHook());
+        RuntimeSupport.getRuntimeSupport().addShutdownHook(new InterpreterTimeTrackHook());
+
+        ThreadListenerSupport.get().register(new InterpreterTrackTimePerThread());
     }
 
     @Override
