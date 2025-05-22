@@ -67,7 +67,7 @@ public class InterpreterOptions {
     public static final RuntimeOptionKey<Boolean> InterpreterTrace = new RuntimeOptionKey<>(false);
 
     @Option(help = "Path to file containing methods meant to be executed outside from native image") //
-    public static final RuntimeOptionKey<String> HybridSpecification = new RuntimeOptionKey<>("");
+    public static final RuntimeOptionKey<String> HybridSpecification = new RuntimeOptionKey<>("hybrid");
 
     public static boolean interpreterEnabled() {
         return DebuggerWithInterpreter.getValue() || RuntimeClassLoading.isSupported();

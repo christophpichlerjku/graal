@@ -563,11 +563,11 @@ public class DebuggerFeature implements InternalFeature {
             }
         }
 
-        final Path path = Paths.get(InterpreterOptions.HybridSpecification.getValue());
+        final Path path = Paths.get(InterpreterOptions.HybridSpecification.getValue() + DUMP_SUFFIX);
         try {
             Files.deleteIfExists(path);
             Files.write(path, interpretableMethods, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
-            System.out.println("[javahybrid] Wrote %d compilation units to spec file %s".formatted(interpretableMethods.size(), path.toString()));
+            System.out.println("[javahybrid] Dumped %d compilation units to file %s".formatted(interpretableMethods.size(), path.toString()));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -617,6 +617,8 @@ public class DebuggerFeature implements InternalFeature {
             }
         }
     }
+
+    private static final String DUMP_SUFFIX = "Dump.txt";
 
     @Override
     public void afterHeapLayout(AfterHeapLayoutAccess access) {
@@ -849,7 +851,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
                         savedCodeSize += m.getCodeSize();
                         count++;
                     } else {
-                        Log.log().string("Failed to interpret: ").number(i, 10, true).newline();
+                        Log.log().string("[javahybrid] Failed to interpret: ").signed(i).newline();
                     }
                 }
             }
@@ -857,19 +859,20 @@ class LogStartupHook implements RuntimeSupport.Hook {
         }
         printInformation(count, universe.getMethods().size(), "compilation units set to managed execution");
         printInformation(savedCodeSize, totalCodeSize, "native image code size saved");
-        Log.log().string("Average compilation unit size: ").rational(totalCodeSize, universe.getMethods().size(), 1).newline();
     }
 
     private static void printInformation(long part, long total, String text) {
-        Log.log().number(part, 10, true).string(" of ").number(total, 10, true).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
+        Log.log().string("[javahybrid] ").signed(part).string(" of ").signed(total).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
     }
+
+    private static final String SPEC_SUFFIX = "Spec.txt";
 
     private static Pair<String, String>[] parseResult(String path) {
         @SuppressWarnings("unchecked")
         Pair<String, String>[] result = new Pair[4];
         int pos = 0;
         try {
-            BufferedReader r = new BufferedReader(new FileReader(new File(path)));
+            BufferedReader r = new BufferedReader(new FileReader(new File(path + SPEC_SUFFIX)));
             for (String line = r.readLine(); line != null; line = r.readLine()) {
                 Pair<String, String> info = CompilationUnitInformation.parseOnlyClazzMethod(line);
                 if (info != null) {
