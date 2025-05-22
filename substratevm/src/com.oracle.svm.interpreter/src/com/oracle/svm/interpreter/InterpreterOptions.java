@@ -60,6 +60,9 @@ public class InterpreterOptions {
     @Option(help = "Track and print on shutdown time spent in interpreter", type = OptionType.Expert)//
     public static final RuntimeOptionKey<Boolean> InterpreterTrackTimeSpent = new RuntimeOptionKey<>(false);
 
+    @Option(help = "Enable profiling of methods executed in the interpreter", type = OptionType.Expert)//
+    public static final RuntimeOptionKey<Boolean> InterpreterProfileCalls = new RuntimeOptionKey<>(false);
+
     @Option(help = "Trace Interpreter execution")//
     public static final RuntimeOptionKey<Boolean> InterpreterTrace = new RuntimeOptionKey<>(false);
 

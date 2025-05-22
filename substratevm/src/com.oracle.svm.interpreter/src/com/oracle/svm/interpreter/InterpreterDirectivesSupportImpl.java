@@ -106,6 +106,12 @@ final class InterpreterDirectivesSupportImpl implements InterpreterDirectivesSup
         if (!rememberCompiledEntry.containsKey(interpreterMethod)) {
             return;
         }
+
+        /* arguments to Log methods might have side-effects */
+        if (InterpreterOptions.InterpreterTraceSupport.getValue()) {
+            traceInterpreter("[resetInterpreterExecution] ").string(interpreterMethod.toString()).newline();
+        }
+
         long previousEntry = rememberCompiledEntry.get(interpreterMethod);
         writeGOTHelper(interpreterMethod, Word.pointer(previousEntry));
     }

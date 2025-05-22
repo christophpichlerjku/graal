@@ -377,6 +377,12 @@ public final class Interpreter {
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
             openExecTimeTrack();
         }
+        if (InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall()) {
+            // Switch interpreter method back to AOT execution
+            InterpreterDirectives.resetInterpreterExecution(method);
+
+            // Note: Although we decided the method should run its AOT companion, we still do _one_ execution in the interpreter
+        }
         try {
             if (method.isSynchronized()) {
                 Object lockTarget = method.isStatic()

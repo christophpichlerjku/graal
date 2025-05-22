@@ -35,6 +35,7 @@ import java.util.Set;
 import com.oracle.svm.core.BuildPhaseProvider;
 import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.heap.UnknownObjectField;
+import com.oracle.svm.core.log.Log;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
@@ -153,6 +154,10 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     /* slot in EST (EnterStubTable) */
     private int enterStubOffset = EST_NO_ENTRY;
 
+    public boolean hasGOTEntry() {
+        return enterStubOffset != EST_NO_ENTRY;
+    }
+
     /**
      * Unique identifier for methods in compiled frames.
      * <p>
@@ -160,6 +165,20 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
      * {@link InterpreterResolvedJavaMethod interpreter method instance} from a compiled frame.
      */
     private int methodId;
+
+    public static long THRESHOLD_CALLCOUNT = 100;
+
+    private long callCount = 0;
+
+    public boolean profileCall() {
+        callCount++;
+
+        if (callCount >= THRESHOLD_CALLCOUNT) {
+            Log.log().string("threshold for method ").string(this.toString()).string(" reached, ").signed(callCount).string("x").newline();
+            return true;
+        }
+        return false;
+    }
 
     @Platforms(Platform.HOSTED_ONLY.class) public boolean needMethodBody;
 
