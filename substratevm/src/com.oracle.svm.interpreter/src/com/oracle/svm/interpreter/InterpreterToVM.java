@@ -877,7 +877,6 @@ public final class InterpreterToVM {
                             .newline();
         }
 
-
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
             Interpreter.closeExecTimeTrack();
         }

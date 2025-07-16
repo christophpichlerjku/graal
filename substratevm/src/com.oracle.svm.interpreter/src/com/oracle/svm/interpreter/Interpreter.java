@@ -264,6 +264,8 @@ import static com.oracle.svm.interpreter.metadata.Bytecodes.SWAP;
 import static com.oracle.svm.interpreter.metadata.Bytecodes.TABLESWITCH;
 import static com.oracle.svm.interpreter.metadata.Bytecodes.WIDE;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.jdk.InternalVMMethod;
 import com.oracle.svm.core.jdk.UninterruptibleUtils;
@@ -298,8 +300,6 @@ import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.UnresolvedJavaType;
-
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Bytecode interpreter loop.
@@ -373,15 +373,28 @@ public final class Interpreter {
         return execute0(method, frame, forceStayInInterpreter);
     }
 
+    private static double reoptThreshold = Double.NaN;
+
+    private static double getReoptThreshold() {
+        if (Double.isNaN(reoptThreshold)) {
+            reoptThreshold = InterpreterOptions.ReoptThreshold.getValue();
+        }
+        return reoptThreshold;
+    }
+
     private static Object execute0(InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean stayInInterpreter) {
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
             openExecTimeTrack();
         }
-        if (InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall()) {
+        if (InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall(getReoptThreshold())) {
             // Switch interpreter method back to AOT execution
             InterpreterDirectives.resetInterpreterExecution(method);
-
-            // Note: Although we decided the method should run its AOT companion, we still do _one_ execution in the interpreter
+            final long reoptCount = Interpreter.reoptedMethodCount.get() + 1;
+            Interpreter.reoptedMethodCount.set(reoptCount);
+// long reoptCount = Interpreter.reoptedMethodCount.incrementAndGet();
+            Log.log().string("Reopt increment to ").signed(Interpreter.reoptedMethodCount.get()).newline().flush();
+            // Note: Although we decided the method should run its AOT companion, we still do _one_
+            // execution in the interpreter
         }
         try {
             if (method.isSynchronized()) {
@@ -403,10 +416,18 @@ public final class Interpreter {
 
     public static final ThreadLocal<Integer> logIndent = ThreadLocal.withInitial(() -> 0);
 
-    public static final FastThreadLocalLong timeTrackStart = FastThreadLocalFactory.createLong("interpreterTimeTrackStart");// hreadLocal.withInitial(() -> 0L);
+    public static final FastThreadLocalLong timeTrackStart = FastThreadLocalFactory.createLong("interpreterTimeTrackStart");// hreadLocal.withInitial(()
+                                                                                                                            // ->
+                                                                                                                            // 0L);
     public static final FastThreadLocalLong timeTrackSum = FastThreadLocalFactory.createLong("interpreterTimeTrackSum");
 
+    public static final FastThreadLocalLong reoptedMethodCount = FastThreadLocalFactory.createLong("interpreterReoptedMethodCount");
+
+    public static long initiallyManagedCount;
+
     public static UninterruptibleUtils.AtomicLong timeTrackSumGlobal = new UninterruptibleUtils.AtomicLong(0);
+
+    public static UninterruptibleUtils.AtomicLong reoptedMethodCountGlobal = new UninterruptibleUtils.AtomicLong(0);
 
     private static int getLogIndent() {
         if (InterpreterOptions.InterpreterTraceSupport.getValue()) {
@@ -487,7 +508,6 @@ public final class Interpreter {
                         .string("/top=").unsigned(top).newline();
     }
 
-
     static void openExecTimeTrack() {
         long cur = timeTrackStart.get();
         if (cur != 0) {
@@ -504,7 +524,6 @@ public final class Interpreter {
         long sum = timeTrackSum.get();
         sum += (System.nanoTime() - cur);
         timeTrackSum.set(sum);
-
         timeTrackStart.set(0L);
     }
 

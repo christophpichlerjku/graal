@@ -857,6 +857,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
             }
             totalCodeSize += m.getCodeSize();
         }
+        Interpreter.initiallyManagedCount = count;
         printInformation(count, universe.getMethods().size(), "compilation units set to managed execution");
         printInformation(savedCodeSize, totalCodeSize, "native image code size saved");
     }

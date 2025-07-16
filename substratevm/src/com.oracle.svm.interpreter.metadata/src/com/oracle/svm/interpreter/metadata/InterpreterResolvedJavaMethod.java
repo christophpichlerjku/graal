@@ -166,15 +166,20 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
      */
     private int methodId;
 
-    public static long THRESHOLD_CALLCOUNT = 100;
-
     private long callCount = 0;
+    private long firstCallTime = -1;
+    private boolean setBack = false;
 
-    public boolean profileCall() {
+    public boolean profileCall(double reoptThreshold) {
         callCount++;
-
-        if (callCount >= THRESHOLD_CALLCOUNT) {
-            Log.log().string("threshold for method ").string(this.toString()).string(" reached, ").signed(callCount).string("x").newline();
+        if (callCount == 1) {
+            firstCallTime = System.nanoTime();
+            return false;
+        }
+        long callRate = (System.nanoTime() - firstCallTime) / callCount;
+        if (callRate < reoptThreshold * 1_000_000) {
+            Log.log().string("threshold for method ").string(this.toString()).string(" reached, calltime [ns] = ").signed(callRate).string(", setBackBefore = ").bool(setBack).newline();
+            setBack = true;
             return true;
         }
         return false;

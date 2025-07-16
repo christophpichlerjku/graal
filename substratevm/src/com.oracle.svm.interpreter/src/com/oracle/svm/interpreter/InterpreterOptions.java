@@ -69,6 +69,9 @@ public class InterpreterOptions {
     @Option(help = "Path to file containing methods meant to be executed outside from native image") //
     public static final RuntimeOptionKey<String> HybridSpecification = new RuntimeOptionKey<>("hybrid");
 
+    @Option(help = "Time in ms between two calls when code in interpreted mode is switched back to native execution")//
+    public static final RuntimeOptionKey<Double> ReoptThreshold = new RuntimeOptionKey<>(1d);
+
     public static boolean interpreterEnabled() {
         return DebuggerWithInterpreter.getValue() || RuntimeClassLoading.isSupported();
     }
