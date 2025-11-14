@@ -354,8 +354,12 @@ public class DebuggerFeature implements InternalFeature {
                          * included.
                          */
                         if (targetMethod instanceof UnresolvedJavaMethod) {
-                            method.getConstantPool().loadReferencedType(targetMethodCPI, bytecode);
-                            targetMethod = method.getConstantPool().lookupMethod(targetMethodCPI, bytecode);
+                            try {
+                                method.getConstantPool().loadReferencedType(targetMethodCPI, bytecode);
+                                targetMethod = method.getConstantPool().lookupMethod(targetMethodCPI, bytecode);
+                            } catch(Throwable t) {
+                                t.printStackTrace();
+                            }
                         }
                         if (targetMethod instanceof AnalysisMethod analysisMethod) {
                             accessImpl.registerAsRoot(analysisMethod, true, "forced for indy support in interpreter");

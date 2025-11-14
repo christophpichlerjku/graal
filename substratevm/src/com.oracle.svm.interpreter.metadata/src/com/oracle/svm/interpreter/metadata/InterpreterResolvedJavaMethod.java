@@ -177,8 +177,8 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
             return false;
         }
         long callRate = (System.nanoTime() - firstCallTime) / callCount;
-        if (callRate < reoptThreshold * 1_000_000) {
-            Log.log().string("threshold for method ").string(this.toString()).string(" reached, calltime [ns] = ").signed(callRate).string(", setBackBefore = ").bool(setBack).newline();
+        if (callRate < reoptThreshold * 1_000_000 && !setBack) {
+            Log.log().string("threshold for method ").string(this.toString()).string(" reached, calltime [ns] = ").signed(callRate)./*string(", setBackBefore = ").bool(setBack).*/newline();
             setBack = true;
             return true;
         }

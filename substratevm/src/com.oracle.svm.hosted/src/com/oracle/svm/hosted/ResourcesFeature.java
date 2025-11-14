@@ -296,7 +296,7 @@ public class ResourcesFeature implements InternalFeature {
                     }
                 }
 
-                boolean isDirectory = Files.isDirectory(Path.of(resourcePath));
+                boolean isDirectory = Files.isDirectory(Path.of(resourcePath)) || resourcePath.charAt(resourcePath.length()-1)=='/';
                 if (isDirectory) {
                     String content = ResourcesUtils.getDirectoryContent(resourcePath, false);
                     Resources.currentLayer().registerDirectoryResource(module, resourcePath, content, false);
@@ -366,7 +366,6 @@ public class ResourcesFeature implements InternalFeature {
                 Resources.currentLayer().registerNegativeQuery(module, resourcePath);
                 return;
             }
-
             Resources.currentLayer().registerResource(module, resourcePath, is, fromJar);
 
             try {
