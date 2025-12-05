@@ -41,19 +41,20 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
     protected void run(StructuredGraph graph, HighTierContext context) {
         int loopCount = graph.getNodes(LoopBeginNode.TYPE).count();
 
-        int nCalls = graph.getNodes(InvokeWithExceptionNode.TYPE).count();
-
-// double nEstimatedCycles = NodeCostUtil.computeGraphCycles(graph, true);
-        long nWeightedNodes = estimateNodeCount(graph);
-        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount, nWeightedNodes, nCalls);
+        long[] result = estimateNodeCount(graph);
+        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount, result[0], (int)result[1]);
     }
 
-    private static long estimateNodeCount(StructuredGraph graph) {
+    private static long[] estimateNodeCount(StructuredGraph graph) {
         long count = 0;
+        long maxLoopDepth = 0;
         final int LOOP_FQ = 10;// currently a magic number
         ControlFlowGraph cfg = ControlFlowGraph.newBuilder(graph).computeLoops(true).connectBlocks(true).build();
         for (HIRBlock block : cfg.getBlocks()) {
             int loopDepth = block.getLoopDepth();
+            if(loopDepth > maxLoopDepth) {
+                maxLoopDepth = loopDepth;
+            }
             for (@SuppressWarnings("unused")
             Node node : block.getNodes()) {
                 count += Math.pow(LOOP_FQ, loopDepth);
@@ -65,7 +66,7 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 // int loopDepth = cfg.getNodeToBlock().get(node).getLoopDepth();
 // count += Math.pow(LOOP_FQ, loopDepth);
 // }
-        return count;
+        return new long[]{ count, maxLoopDepth};
     }
 
 }

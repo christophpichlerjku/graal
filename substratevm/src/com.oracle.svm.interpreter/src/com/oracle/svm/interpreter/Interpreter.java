@@ -382,11 +382,15 @@ public final class Interpreter {
         return reoptThreshold;
     }
 
+    //TODO change back
+    private static final boolean ENABLE_REOPT_TO_AOT = false;
+
     private static Object execute0(InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean stayInInterpreter) {
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
             openExecTimeTrack();
+            callCount.set(callCount.get()+1);
         }
-        if (InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall(getReoptThreshold())) {
+        if (ENABLE_REOPT_TO_AOT && InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall(getReoptThreshold())) {
             // Switch interpreter method back to AOT execution
             InterpreterDirectives.resetInterpreterExecution(method);
             final long reoptCount = Interpreter.reoptedMethodCount.get() + 1;
@@ -423,11 +427,15 @@ public final class Interpreter {
 
     public static final FastThreadLocalLong reoptedMethodCount = FastThreadLocalFactory.createLong("interpreterReoptedMethodCount");
 
+    public static final FastThreadLocalLong callCount = FastThreadLocalFactory.createLong("interpreterCallCount");
+
     public static long initiallyManagedCount;
 
     public static UninterruptibleUtils.AtomicLong timeTrackSumGlobal = new UninterruptibleUtils.AtomicLong(0);
 
     public static UninterruptibleUtils.AtomicLong reoptedMethodCountGlobal = new UninterruptibleUtils.AtomicLong(0);
+
+    public static UninterruptibleUtils.AtomicLong callCountGlobal = new UninterruptibleUtils.AtomicLong(0);
 
     private static int getLogIndent() {
         if (InterpreterOptions.InterpreterTraceSupport.getValue()) {

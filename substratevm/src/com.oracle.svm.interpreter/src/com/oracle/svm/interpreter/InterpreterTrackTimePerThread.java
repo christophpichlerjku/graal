@@ -10,11 +10,13 @@ class InterpreterTrackTimePerThread implements ThreadListener {
     public void afterThreadExit(IsolateThread isolateThread, Thread javaThread) {
         Interpreter.timeTrackSumGlobal.addAndGet(Interpreter.timeTrackSum.get(isolateThread));
         Interpreter.reoptedMethodCountGlobal.addAndGet(Interpreter.reoptedMethodCount.get(isolateThread));
+        Interpreter.callCountGlobal.addAndGet(Interpreter.callCount.get(isolateThread));
 
         // Reset thread sum, to avoid accounting twice for it in InterpreterTimeTrackHook (for
         // shutdown)
         Interpreter.timeTrackSum.set(isolateThread, 0L);
         Interpreter.reoptedMethodCount.set(isolateThread, 0L);
+        Interpreter.callCount.set(isolateThread,0L);
 
     }
 }

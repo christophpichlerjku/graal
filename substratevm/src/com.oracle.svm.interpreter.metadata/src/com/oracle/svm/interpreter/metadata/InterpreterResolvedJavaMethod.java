@@ -96,9 +96,9 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @Platforms(Platform.HOSTED_ONLY.class) //
     private int loopCount;
     @Platforms(Platform.HOSTED_ONLY.class) //
-    private double nEstimatedCycles;
+    private long nEstimatedCycles;
     @Platforms(Platform.HOSTED_ONLY.class)//
-    private int nCalls;
+    private int maxLoopDepth;
 
     @Platforms(Platform.HOSTED_ONLY.class)//
     public void setFeatureLoopCount(int loopCount) {
@@ -106,13 +106,13 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatureEstimatedCycles(double nEstimatedCycles) {
+    public void setFeatureEstimatedCycles(long nEstimatedCycles) {
         this.nEstimatedCycles = nEstimatedCycles;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatureNCalls(int nCalls) {
-        this.nCalls = nCalls;
+    public void setFeatureMaxLoopDepth(int maxLoopDepth) {
+        this.maxLoopDepth = maxLoopDepth;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
@@ -121,13 +121,13 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public double getFeatureEstimatedCycles() {
+    public long getFeatureEstimatedCycles() {
         return nEstimatedCycles;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public int getFeatureNCalls() {
-        return nCalls;
+    public int getFeatureMaxLoopDepth() {
+        return maxLoopDepth;
     }
 
     public static class InlinedBy {

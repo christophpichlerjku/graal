@@ -537,7 +537,7 @@ public class DebuggerFeature implements InternalFeature {
                 String className = interpreterMethod.getDeclaringClass().getName();
                 String methodName = interpreterMethod.getName();
                 CompilationUnitInformation info = new CompilationUnitInformation(className, methodName, task.result.getBytecodeSize(), task.result.getTargetCodeSize(),
-                                interpreterMethod.getFeatureLoopCount(), interpreterMethod.getFeatureEstimatedCycles(), interpreterMethod.getFeatureNCalls());
+                                interpreterMethod.getFeatureLoopCount(), interpreterMethod.getFeatureEstimatedCycles(), interpreterMethod.getFeatureMaxLoopDepth());
                 interpretableMethods.add(info.toFileString());
             }
 
@@ -780,14 +780,13 @@ public class DebuggerFeature implements InternalFeature {
     }
 }
 
-record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount, double nEstimatedCycles, int nCalls) {
+record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount, long nEstimatedCycles, int maxLoopDepth) {
 
     static final String BYTE_CODE_SIZE = "bcSize";
     static final String TARGET_SIZE = "targetSize";
-    static final String LOOP_COUNT = "loops";
-    static final String MAX_LOOP_NESTING_LEVEL = "maxLoopNestingLevel";
+    static final String LOOP_COUNT = "nLoops";
     static final String N_ESTIMATED_CYCLES = "nEstimatedCycles";
-    static final String N_CALLS = "nCalls";
+    static final String MAX_LOOP_DEPTH = "maxLoopDepth";
 
     static CompilationUnitInformation parse(String line) {
         String[] splitted = line.split(" ");
@@ -800,9 +799,9 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
             int bytecodeSize = Integer.parseInt(splitted[1].split("=")[1]);
             int targetCodeSize = Integer.parseInt(splitted[2].split("=")[1]);
             int loopCount = Integer.parseInt(splitted[3].split("=")[1]);
-            double nEstimatedCycles = Double.parseDouble(splitted[4].split("=")[1]);
-            int nCalls = Integer.parseInt(splitted[5].split("=")[1]);
-            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, nCalls);
+            long nEstimatedCycles = Long.parseLong(splitted[4].split("=")[1]);
+            int maxLoopDepth = Integer.parseInt(splitted[5].split("=")[1]);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.err.println(line);
             e.printStackTrace();
@@ -821,13 +820,13 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     String toFileString() {
-        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%f %s=%d", //
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d", //
                         clazz, method,//
                         BYTE_CODE_SIZE, bytecodeSize,//
                         TARGET_SIZE, targetCodeSize,//
                         LOOP_COUNT, loopCount,//
                         N_ESTIMATED_CYCLES, nEstimatedCycles,//
-                        N_CALLS, nCalls);
+                        MAX_LOOP_DEPTH, maxLoopDepth);
     }
 }
 
