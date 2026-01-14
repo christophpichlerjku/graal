@@ -388,7 +388,6 @@ public final class Interpreter {
     private static Object execute0(InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean stayInInterpreter) {
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
             openExecTimeTrack(method);
-            callCount.set(callCount.get() + 1);
         }
         if (ENABLE_REOPT_TO_AOT && InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall(getReoptThreshold())) {
             // Switch interpreter method back to AOT execution
@@ -438,7 +437,7 @@ public final class Interpreter {
     public static UninterruptibleUtils.AtomicLong callCountGlobal = new UninterruptibleUtils.AtomicLong(0);
 
     private static InterpreterResolvedJavaMethod curbaseMethod = null;
-    public static long[] singleCallTimes = new long[5000];
+    public static long[] singleCallTimes = new long[1000];
     public static int singleCallIndex = 0;
 
     private static int getLogIndent() {
@@ -525,6 +524,7 @@ public final class Interpreter {
             resumeExecTimeTrack();
             return;
         }
+        callCount.set(callCount.get() + 1);
         curbaseMethod = method;
         //Log.log().string(" -> OPEN ").string(method.getDeclaringClass().getName()).string("::").string(method.getName()).newline().flush();
         //start = now()
@@ -570,6 +570,7 @@ public final class Interpreter {
         }
         timeTrackSum.set(sum);
         timeTrackStart.set(0L);
+        curbaseMethod = null;
     }
 
     public static final class Root {
