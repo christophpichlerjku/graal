@@ -31,5 +31,11 @@ public class InterpreterTimeTrackHook implements RuntimeSupport.Hook {
         final long denom = 1_000_000;
         Log.log().string("Re-opt threshold: ").rational((long) (reoptThreshold * denom), denom, 3).newline().flush();
         Log.log().string("Interpreter call count: ").signed(callCount).newline().flush();
+        Log.log().string("Interpreter single call times: ");
+        for(int i=0; i<Interpreter.singleCallIndex; i++) {
+            Log.log().unsigned(Interpreter.singleCallTimes[i]);
+            Log.log().string(", ");
+        }
+        Log.log().string(";").newline().flush();
     }
 }

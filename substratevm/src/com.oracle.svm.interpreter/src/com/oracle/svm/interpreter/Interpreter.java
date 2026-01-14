@@ -387,8 +387,8 @@ public final class Interpreter {
 
     private static Object execute0(InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean stayInInterpreter) {
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
-            openExecTimeTrack();
-            callCount.set(callCount.get()+1);
+            openExecTimeTrack(method);
+            callCount.set(callCount.get() + 1);
         }
         if (ENABLE_REOPT_TO_AOT && InterpreterOptions.InterpreterProfileCalls.getValue() && method.hasGOTEntry() && method.profileCall(getReoptThreshold())) {
             // Switch interpreter method back to AOT execution
@@ -403,8 +403,8 @@ public final class Interpreter {
         try {
             if (method.isSynchronized()) {
                 Object lockTarget = method.isStatic()
-                                ? method.getDeclaringClass().getJavaClass()
-                                : EspressoFrame.getThis(frame);
+                        ? method.getDeclaringClass().getJavaClass()
+                        : EspressoFrame.getThis(frame);
                 assert lockTarget != null;
                 InterpreterToVM.monitorEnter(frame, nullCheck(lockTarget));
             }
@@ -413,7 +413,7 @@ public final class Interpreter {
         } finally {
             InterpreterToVM.releaseInterpreterFrameLocks(frame);
             if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
-                closeExecTimeTrack();
+                closeExecTimeTrack(method);
             }
         }
     }
@@ -421,8 +421,8 @@ public final class Interpreter {
     public static final ThreadLocal<Integer> logIndent = ThreadLocal.withInitial(() -> 0);
 
     public static final FastThreadLocalLong timeTrackStart = FastThreadLocalFactory.createLong("interpreterTimeTrackStart");// hreadLocal.withInitial(()
-                                                                                                                            // ->
-                                                                                                                            // 0L);
+    // ->
+    // 0L);
     public static final FastThreadLocalLong timeTrackSum = FastThreadLocalFactory.createLong("interpreterTimeTrackSum");
 
     public static final FastThreadLocalLong reoptedMethodCount = FastThreadLocalFactory.createLong("interpreterReoptedMethodCount");
@@ -436,6 +436,10 @@ public final class Interpreter {
     public static UninterruptibleUtils.AtomicLong reoptedMethodCountGlobal = new UninterruptibleUtils.AtomicLong(0);
 
     public static UninterruptibleUtils.AtomicLong callCountGlobal = new UninterruptibleUtils.AtomicLong(0);
+
+    private static InterpreterResolvedJavaMethod curbaseMethod = null;
+    public static long[] singleCallTimes = new long[5000];
+    public static int singleCallIndex = 0;
 
     private static int getLogIndent() {
         if (InterpreterOptions.InterpreterTraceSupport.getValue()) {
@@ -458,13 +462,13 @@ public final class Interpreter {
 
         setLogIndent(indent + 2);
         traceInterpreter(" ".repeat(indent))
-                        .string("[interp] Entered ")
-                        .string(method.getDeclaringClass().getName())
-                        .string("::")
-                        .string(method.getName())
-                        .string(method.getSignature().toMethodDescriptor())
-                        .string(" with bci=").unsigned(curBCI)
-                        .string("/top=").unsigned(top).newline();
+                .string("[interp] Entered ")
+                .string(method.getDeclaringClass().getName())
+                .string("::")
+                .string(method.getName())
+                .string(method.getSignature().toMethodDescriptor())
+                .string(" with bci=").unsigned(curBCI)
+                .string("/top=").unsigned(top).newline();
     }
 
     private static void traceInterpreterReturn(InterpreterResolvedJavaMethod method, int indent, int curBCI, int top) {
@@ -476,12 +480,12 @@ public final class Interpreter {
         setLogIndent(indent);
         traceInterpreter(" ".repeat(indent));
         traceInterpreter("[interp] Leave ")
-                        .string(method.getDeclaringClass().getName())
-                        .string("::")
-                        .string(method.getName())
-                        .string(method.getSignature().toMethodDescriptor())
-                        .string(" with bci=").unsigned(curBCI)
-                        .string("/top=").unsigned(top).newline();
+                .string(method.getDeclaringClass().getName())
+                .string("::")
+                .string(method.getName())
+                .string(method.getSignature().toMethodDescriptor())
+                .string(" with bci=").unsigned(curBCI)
+                .string("/top=").unsigned(top).newline();
     }
 
     private static void traceInterpreterInstruction(InterpreterFrame frame, int indent, int curBCI, int top, int curOpcode) {
@@ -491,8 +495,8 @@ public final class Interpreter {
         }
 
         traceInterpreter(" ".repeat(indent))
-                        .string("bci=").unsigned(curBCI).string(" ")
-                        .string(Bytecodes.nameOf(curOpcode));
+                .string("bci=").unsigned(curBCI).string(" ")
+                .string(Bytecodes.nameOf(curOpcode));
         for (int slot = top - 1; slot >= 0; slot--) {
             traceInterpreter(", s").unsigned(slot).string("=").hex(frame.getLongStatic(slot)).string("/").object(frame.getObjectStatic(slot));
         }
@@ -507,16 +511,23 @@ public final class Interpreter {
 
         setLogIndent(indent);
         traceInterpreter(" ".repeat(indent))
-                        .string("[interp] Exception ")
-                        .string(method.getDeclaringClass().getName())
-                        .string("::")
-                        .string(method.getName())
-                        .string(method.getSignature().toMethodDescriptor())
-                        .string(" with bci=").unsigned(curBCI)
-                        .string("/top=").unsigned(top).newline();
+                .string("[interp] Exception ")
+                .string(method.getDeclaringClass().getName())
+                .string("::")
+                .string(method.getName())
+                .string(method.getSignature().toMethodDescriptor())
+                .string(" with bci=").unsigned(curBCI)
+                .string("/top=").unsigned(top).newline();
     }
 
-    static void openExecTimeTrack() {
+    static void openExecTimeTrack(InterpreterResolvedJavaMethod method) {
+        if (curbaseMethod != null) {
+            resumeExecTimeTrack();
+            return;
+        }
+        curbaseMethod = method;
+        //Log.log().string(" -> OPEN ").string(method.getDeclaringClass().getName()).string("::").string(method.getName()).newline().flush();
+        //start = now()
         long cur = timeTrackStart.get();
         if (cur != 0) {
             Log.log().string("cur=").signed(cur).newline().flush();
@@ -525,12 +536,38 @@ public final class Interpreter {
         timeTrackStart.set(System.nanoTime());
     }
 
-    static void closeExecTimeTrack() {
+    static void resumeExecTimeTrack() {
+        //Log.log().string("|-> RESUME").newline().flush();
+        //start = now() - start
+        long cur = timeTrackStart.get();
+        timeTrackStart.set(System.nanoTime() - cur);
+    }
+
+    static void pauseExecTimeTrack() {
+        //Log.log().string(" ->| PAUSE").newline().flush();
+        //start = now() - start
+        long cur = timeTrackStart.get();
+        timeTrackStart.set(System.nanoTime() - cur);
+    }
+
+    static void closeExecTimeTrack(InterpreterResolvedJavaMethod method) {
+        if (method != curbaseMethod) {
+            pauseExecTimeTrack();
+            return;
+        }
+        //Log.log().string(" -> CLOSE ").string(method.getDeclaringClass().getName()).string("::").string(method.getName()).newline().flush();
+        //diff = now() - start
+        // sum += diff
+        // start = 0
         long cur = timeTrackStart.get();
         VMError.guarantee(cur != 0);
 
         long sum = timeTrackSum.get();
-        sum += (System.nanoTime() - cur);
+        long diff = System.nanoTime() - cur;
+        sum += diff;
+        if (singleCallIndex < singleCallTimes.length) {
+            singleCallTimes[singleCallIndex++] = diff;
+        }
         timeTrackSum.set(sum);
         timeTrackStart.set(0L);
     }
@@ -538,7 +575,7 @@ public final class Interpreter {
     public static final class Root {
 
         private static Object executeBodyFromBCI(InterpreterFrame frame, InterpreterResolvedJavaMethod method, int startBCI, int startTop,
-                        boolean forceStayInInterpreter) {
+                                                 boolean forceStayInInterpreter) {
             int curBCI = startBCI;
             int top = startTop;
             byte[] code = method.getInterpretedCode();
@@ -557,7 +594,8 @@ public final class Interpreter {
                 }
             }
 
-            loop: while (true) {
+            loop:
+            while (true) {
                 /*
                  * Opaque read ensuring that BREAKPOINT opcodes are eventually read. Opaque == plain
                  * on x86/64, but on other architectures the read must be eventually guaranteed.
@@ -571,7 +609,7 @@ public final class Interpreter {
                     if (steppingControl != null && steppingControl.isActiveAtCurrentFrameDepth()) {
                         int stepSize = steppingControl.getSize();
                         if (stepSize == SteppingControl.STEP_MIN ||
-                                        (stepSize == SteppingControl.STEP_LINE && !steppingControl.withinSameLine(method, curBCI))) {
+                                (stepSize == SteppingControl.STEP_LINE && !steppingControl.withinSameLine(method, curBCI))) {
                             debuggerEventFlags |= EventKind.SINGLE_STEP.getFlag();
                         }
                     }
@@ -1222,22 +1260,22 @@ public final class Interpreter {
 
     private static SemanticJavaException noClassDefFoundError(int opcode, JavaType javaType) {
         String message = (javaType != null)
-                        ? javaType.toJavaName()
-                        : MetadataUtil.fmt("%s: (cpi = 0) unknown type", Bytecodes.nameOf(opcode));
+                ? javaType.toJavaName()
+                : MetadataUtil.fmt("%s: (cpi = 0) unknown type", Bytecodes.nameOf(opcode));
         throw SemanticJavaException.raise(new NoClassDefFoundError(message));
     }
 
     private static SemanticJavaException noSuchMethodError(int opcode, JavaMethod javaMethod) {
         String message = (javaMethod != null)
-                        ? javaMethod.format("%H.%n(%P)")
-                        : MetadataUtil.fmt("%s: (cpi = 0) unknown method", Bytecodes.nameOf(opcode));
+                ? javaMethod.format("%H.%n(%P)")
+                : MetadataUtil.fmt("%s: (cpi = 0) unknown method", Bytecodes.nameOf(opcode));
         throw SemanticJavaException.raise(new NoSuchMethodError(message));
     }
 
     private static SemanticJavaException noSuchFieldError(int opcode, JavaField javaField) {
         String message = (javaField != null)
-                        ? javaField.format("%H.%n")
-                        : MetadataUtil.fmt("%s: (cpi = 0) unknown field", Bytecodes.nameOf(opcode));
+                ? javaField.format("%H.%n")
+                : MetadataUtil.fmt("%s: (cpi = 0) unknown field", Bytecodes.nameOf(opcode));
         throw SemanticJavaException.raise(new NoSuchFieldError(message));
     }
 
@@ -1279,7 +1317,7 @@ public final class Interpreter {
     }
 
     private static int invoke(InterpreterFrame callerFrame, InterpreterResolvedJavaMethod method, byte[] code, int top, int curBCI, int opcode, boolean forceStayInInterpreter,
-                    boolean preferStayInInterpreter) {
+                              boolean preferStayInInterpreter) {
         int invokeTop = top;
 
         char cpi = BytecodeStream.readCPI2(code, curBCI);
@@ -1522,8 +1560,8 @@ public final class Interpreter {
 
         int slotCount = kind.getSlotCount();
         Object receiver = (opcode == PUTSTATIC)
-                        ? (kind.isPrimitive() ? StaticFieldsSupport.getStaticPrimitiveFields() : StaticFieldsSupport.getStaticObjectFields())
-                        : nullCheck(popObject(frame, top - slotCount - 1));
+                ? (kind.isPrimitive() ? StaticFieldsSupport.getStaticPrimitiveFields() : StaticFieldsSupport.getStaticObjectFields())
+                : nullCheck(popObject(frame, top - slotCount - 1));
 
         if (field.isStatic()) {
             InterpreterToVM.ensureClassInitialized(field.getDeclaringClass());
@@ -1565,8 +1603,8 @@ public final class Interpreter {
         assert kind != JavaKind.Illegal;
 
         Object receiver = opcode == GETSTATIC
-                        ? (kind.isPrimitive() ? StaticFieldsSupport.getStaticPrimitiveFields() : StaticFieldsSupport.getStaticObjectFields())
-                        : nullCheck(popObject(frame, top - 1));
+                ? (kind.isPrimitive() ? StaticFieldsSupport.getStaticPrimitiveFields() : StaticFieldsSupport.getStaticObjectFields())
+                : nullCheck(popObject(frame, top - 1));
 
         if (field.isStatic()) {
             InterpreterToVM.ensureClassInitialized(field.getDeclaringClass());

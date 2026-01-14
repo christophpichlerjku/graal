@@ -878,7 +878,7 @@ public final class InterpreterToVM {
         }
 
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
-            Interpreter.closeExecTimeTrack();
+            Interpreter.pauseExecTimeTrack();
         }
 
         Object retObj = null;
@@ -899,7 +899,7 @@ public final class InterpreterToVM {
             }
         } finally {
             if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
-                Interpreter.openExecTimeTrack();
+                Interpreter.resumeExecTimeTrack();
             }
         }
 
