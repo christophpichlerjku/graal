@@ -88,9 +88,9 @@ final class InterpreterDirectivesSupportImpl implements InterpreterDirectivesSup
     }
 
     private static void writeGOTHelper(InterpreterResolvedJavaMethod interpreterMethod, UnsignedWord estEntry) {
-        GOTHeapSupport.get().makeGOTWritable();
+//        GOTHeapSupport.get().makeGOTWritable();
         GOTAccess.writeToGotEntry(interpreterMethod.getGotOffset(), estEntry);
-        GOTHeapSupport.get().makeGOTReadOnly();
+//        GOTHeapSupport.get().makeGOTReadOnly();
     }
 
     @Override

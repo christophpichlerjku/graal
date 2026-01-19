@@ -59,6 +59,8 @@ public abstract class GOTHeapSupport extends DynamicMethodAddressResolutionHeapS
     private static final CGlobalData<Pointer> GOT_STATUS = CGlobalDataFactory.createWord(GOT_UNINITIALIZED);
     static final CGlobalData<WordPointer> GOT_START_ADDRESS = CGlobalDataFactory.createWord();
 
+
+
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     protected static UnsignedWord getGotSectionSize() {
         return IMAGE_GOT_END.get().subtract(IMAGE_GOT_BEGIN.get());
@@ -148,7 +150,8 @@ public abstract class GOTHeapSupport extends DynamicMethodAddressResolutionHeapS
         // Only the first isolate can reach here.
         int ret = initialize(GOT_START_ADDRESS.get());
         if (ret == CEntryPointErrors.NO_ERROR) {
-            makeGOTReadOnly();
+            //makeGOTReadOnly();
+            makeGOTWritable();
         }
         GOT_STATUS.get().writeWordVolatile(0, Word.signed(ret));
         return ret;

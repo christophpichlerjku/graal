@@ -39,27 +39,27 @@ public class MethodAddressResolutionDispatcher {
 
     @Uninterruptible(reason = "PLT/GOT method address resolution doesn't support interruptible code paths.")
     protected static long resolveMethodAddress(long gotEntry) {
-        try {
-            JavaSpinLockUtils.lockNoTransition(dispatcher, LOCK_OFFSET);
-            if (dispatcher.activeResolverInstances == 0) {
-                GOTHeapSupport.get().makeGOTWritable();
-            }
-            dispatcher.activeResolverInstances++;
-        } finally {
-            JavaSpinLockUtils.unlock(dispatcher, LOCK_OFFSET);
-        }
+//        try {
+//            JavaSpinLockUtils.lockNoTransition(dispatcher, LOCK_OFFSET);
+//            if (dispatcher.activeResolverInstances == 0) {
+//                GOTHeapSupport.get().makeGOTWritable();
+//            }
+//            dispatcher.activeResolverInstances++;
+//        } finally {
+//            JavaSpinLockUtils.unlock(dispatcher, LOCK_OFFSET);
+//        }
 
         long resolvedMethodAddress = PLTGOTConfiguration.singleton().getMethodAddressResolver().resolveMethodWithGotEntry(gotEntry);
 
-        try {
-            JavaSpinLockUtils.lockNoTransition(dispatcher, LOCK_OFFSET);
-            if (dispatcher.activeResolverInstances == 1) {
-                GOTHeapSupport.get().makeGOTReadOnly();
-            }
-            dispatcher.activeResolverInstances--;
-        } finally {
-            JavaSpinLockUtils.unlock(dispatcher, LOCK_OFFSET);
-        }
+//        try {
+//            JavaSpinLockUtils.lockNoTransition(dispatcher, LOCK_OFFSET);
+//            if (dispatcher.activeResolverInstances == 1) {
+//                GOTHeapSupport.get().makeGOTReadOnly();
+//            }
+//            dispatcher.activeResolverInstances--;
+//        } finally {
+//            JavaSpinLockUtils.unlock(dispatcher, LOCK_OFFSET);
+//        }
         return resolvedMethodAddress;
     }
 }
