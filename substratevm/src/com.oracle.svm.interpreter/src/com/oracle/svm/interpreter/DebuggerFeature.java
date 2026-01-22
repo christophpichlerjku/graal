@@ -131,10 +131,10 @@ import jdk.vm.ci.meta.UnresolvedJavaMethod;
 
 /**
  * Also known as "YellowBird".
- *
+ * <p>
  * In this mode the interpreter is used as an alternative execution engine to already AOT compiled
  * methods in an image. This is needed to enable bytecode level debugging for JDWP.
- *
+ * <p>
  * This also implies that all methods that are AOT compiled, need their bytecodes collected at image
  * build-time.
  */
@@ -156,8 +156,8 @@ public class DebuggerFeature implements InternalFeature {
     @Override
     public List<Class<? extends Feature>> getRequiredFeatures() {
         return Arrays.asList(
-                        InterpreterFeature.class,
-                        IdentityMethodAddressResolverFeature.class);
+                InterpreterFeature.class,
+                IdentityMethodAddressResolverFeature.class);
     }
 
     private static Class<?> getArgumentClass(GraphBuilderContext b, ResolvedJavaMethod targetMethod, int parameterIndex, ValueNode arg) {
@@ -211,7 +211,7 @@ public class DebuggerFeature implements InternalFeature {
             access.registerAsAccessed(DebuggerSupport.class.getDeclaredField("methodPointersInImage"));
 
             accessImpl.registerAsRoot(System.class.getDeclaredMethod("arraycopy", Object.class, int.class, Object.class, int.class, int.class), true,
-                            "Allow interpreting methods that call System.arraycopy");
+                    "Allow interpreting methods that call System.arraycopy");
             accessImpl.registerAsRoot(Math.class.getDeclaredMethod("sqrt", double.class), true, "Hack for allowing Math.sqrt in interpreter");
 
             accessImpl.registerAsRoot(java.util.Random.class.getConstructor(long.class), true, "Hack for allowing Random.<init> to be called from interpreter");
@@ -257,8 +257,8 @@ public class DebuggerFeature implements InternalFeature {
          */
         try {
             List<Method> appendMethods = Arrays.stream(StringBuilder.class.getDeclaredMethods())
-                            .filter(m -> "append".equals(m.getName()))
-                            .collect(Collectors.toList());
+                    .filter(m -> "append".equals(m.getName()))
+                    .collect(Collectors.toList());
             for (Method m : appendMethods) {
                 accessImpl.registerAsRoot(m, false, "string concat in interpreter");
             }
@@ -357,7 +357,7 @@ public class DebuggerFeature implements InternalFeature {
                             try {
                                 method.getConstantPool().loadReferencedType(targetMethodCPI, bytecode);
                                 targetMethod = method.getConstantPool().lookupMethod(targetMethodCPI, bytecode);
-                            } catch(Throwable t) {
+                            } catch (Throwable t) {
                                 t.printStackTrace();
                             }
                         }
@@ -381,7 +381,7 @@ public class DebuggerFeature implements InternalFeature {
     @Override
     public void afterAnalysis(AfterAnalysisAccess access) {
         VMError.guarantee(InterpreterToVM.wordJavaKind() == JavaKind.Long ||
-                        InterpreterToVM.wordJavaKind() == JavaKind.Int);
+                InterpreterToVM.wordJavaKind() == JavaKind.Int);
     }
 
     @Override
@@ -428,7 +428,7 @@ public class DebuggerFeature implements InternalFeature {
                 // Test if the methods needs to be compiled for execution in the interpreter:
                 if (hMethod.hasBytecodes() && aMethod.getAnalyzedGraph() != null) {
                     if (aMethod.wrapped instanceof SubstitutionMethod subMethod && subMethod.isUserSubstitution() ||
-                                    invocationPlugins.lookupInvocation(aMethod, invocationLookupOptions) != null) {
+                            invocationPlugins.lookupInvocation(aMethod, invocationLookupOptions) != null) {
                         // The method is substituted, or an invocation plugin is registered
                         SubstrateCompilationDirectives.singleton().registerForcedCompilation(hMethod);
                         needsMethodBody = false;
@@ -472,7 +472,7 @@ public class DebuggerFeature implements InternalFeature {
         // Allow methods that call System.arraycopy to be interpreted.
         try {
             HostedMethod arraycopy = hMetaAccess.lookupJavaMethod(
-                            System.class.getDeclaredMethod("arraycopy", Object.class, int.class, Object.class, int.class, int.class));
+                    System.class.getDeclaredMethod("arraycopy", Object.class, int.class, Object.class, int.class, int.class));
             SubstrateCompilationDirectives.singleton().registerForcedCompilation(arraycopy);
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
@@ -536,8 +536,7 @@ public class DebuggerFeature implements InternalFeature {
                 CompileTask task = accessImpl.getCompilations().get(hostedMethod);
                 String className = interpreterMethod.getDeclaringClass().getName();
                 String methodName = interpreterMethod.getName();
-                CompilationUnitInformation info = new CompilationUnitInformation(className, methodName, task.result.getBytecodeSize(), task.result.getTargetCodeSize(),
-                                interpreterMethod.getFeatureLoopCount(), interpreterMethod.getFeatureEstimatedCycles(), interpreterMethod.getFeatureMaxLoopDepth());
+                CompilationUnitInformation info = CompilationUnitInformation.create(className, methodName, task.result.getBytecodeSize(), task.result.getTargetCodeSize(), interpreterMethod);
                 interpretableMethods.add(info.toFileString());
             }
 
@@ -672,9 +671,9 @@ public class DebuggerFeature implements InternalFeature {
         FeatureImpl.AfterAbstractImageCreationAccessImpl accessImpl = ((FeatureImpl.AfterAbstractImageCreationAccessImpl) access);
 
         List<InterpreterResolvedJavaMethod> includedMethods = BuildTimeInterpreterUniverse.singleton().getMethods()
-                        .stream()
-                        .filter(m -> m.getEnterStubOffset() != EST_NO_ENTRY)
-                        .collect(Collectors.toList());
+                .stream()
+                .filter(m -> m.getEnterStubOffset() != EST_NO_ENTRY)
+                .collect(Collectors.toList());
 
         /* create enter stubs */
         InterpreterStubSection stubSection = ImageSingletons.lookup(InterpreterStubSection.class);
@@ -702,26 +701,26 @@ public class DebuggerFeature implements InternalFeature {
 
         DebuggerSupport supportImpl = DebuggerSupport.singleton();
         SerializationContext.Builder builder = supportImpl.getUniverseSerializerBuilder()
-                        .registerWriter(true, ReferenceConstant.class, Serializers.newReferenceConstantWriter(ref -> {
-                            NativeImageHeap.ObjectInfo info = null;
-                            if (ref instanceof Class) {
-                                DynamicHub hub = classToHub.get(ref);
-                                info = heap.getObjectInfo(hub);
-                            } else if (ref instanceof ImageHeapConstant imageHeapConstant) {
-                                info = heap.getConstantInfo(imageHeapConstant);
-                            } else {
-                                info = heap.getObjectInfo(ref);
-                            }
+                .registerWriter(true, ReferenceConstant.class, Serializers.newReferenceConstantWriter(ref -> {
+                    NativeImageHeap.ObjectInfo info = null;
+                    if (ref instanceof Class) {
+                        DynamicHub hub = classToHub.get(ref);
+                        info = heap.getObjectInfo(hub);
+                    } else if (ref instanceof ImageHeapConstant imageHeapConstant) {
+                        info = heap.getConstantInfo(imageHeapConstant);
+                    } else {
+                        info = heap.getObjectInfo(ref);
+                    }
 
-                            if (info == null) {
-                                // avoid side-effects
-                                String purgedObject = Objects.toIdentityString(ref);
-                                InterpreterUtil.log("Constant not serialized in the image: %s", purgedObject);
-                                return 0L;
-                            } else {
-                                return info.getOffset();
-                            }
-                        }));
+                    if (info == null) {
+                        // avoid side-effects
+                        String purgedObject = Objects.toIdentityString(ref);
+                        InterpreterUtil.log("Constant not serialized in the image: %s", purgedObject);
+                        return 0L;
+                    } else {
+                        return info.getOffset();
+                    }
+                }));
 
         Path destDir = NativeImageGenerator.generatedFiles(HostedOptionValues.singleton());
 
@@ -780,13 +779,19 @@ public class DebuggerFeature implements InternalFeature {
     }
 }
 
-record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount, long nEstimatedCycles, int maxLoopDepth) {
+record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount,
+                                  long nEstimatedCycles, int maxLoopDepth, int shortestReturn) {
 
     static final String BYTE_CODE_SIZE = "bcSize";
     static final String TARGET_SIZE = "targetSize";
     static final String LOOP_COUNT = "nLoops";
     static final String N_ESTIMATED_CYCLES = "nEstimatedCycles";
     static final String MAX_LOOP_DEPTH = "maxLoopDepth";
+    static final String SHORTEST_RETURN = "shortestReturn";
+
+    static CompilationUnitInformation create(String clazz, String methodName, int bytecodeSize, int targetCodeSize, InterpreterResolvedJavaMethod method) {
+        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn());
+    }
 
     static CompilationUnitInformation parse(String line) {
         String[] splitted = line.split(" ");
@@ -801,7 +806,8 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
             int loopCount = Integer.parseInt(splitted[3].split("=")[1]);
             long nEstimatedCycles = Long.parseLong(splitted[4].split("=")[1]);
             int maxLoopDepth = Integer.parseInt(splitted[5].split("=")[1]);
-            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth);
+            int shortestReturn = Integer.parseInt(splitted[6].split("=")[1]);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.err.println(line);
             e.printStackTrace();
@@ -820,13 +826,14 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     String toFileString() {
-        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d", //
-                        clazz, method,//
-                        BYTE_CODE_SIZE, bytecodeSize,//
-                        TARGET_SIZE, targetCodeSize,//
-                        LOOP_COUNT, loopCount,//
-                        N_ESTIMATED_CYCLES, nEstimatedCycles,//
-                        MAX_LOOP_DEPTH, maxLoopDepth);
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
+                clazz, method,//
+                BYTE_CODE_SIZE, bytecodeSize,//
+                TARGET_SIZE, targetCodeSize,//
+                LOOP_COUNT, loopCount,//
+                N_ESTIMATED_CYCLES, nEstimatedCycles,//
+                MAX_LOOP_DEPTH, maxLoopDepth,//
+                SHORTEST_RETURN, shortestReturn);
     }
 }
 

@@ -27,8 +27,8 @@ package com.oracle.svm.core.graal.phases;
 import com.oracle.svm.core.interpreter.InterpreterSupport;
 
 import jdk.graal.compiler.graph.Node;
-import jdk.graal.compiler.nodes.InvokeWithExceptionNode;
 import jdk.graal.compiler.nodes.LoopBeginNode;
+import jdk.graal.compiler.nodes.ReturnNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.cfg.ControlFlowGraph;
 import jdk.graal.compiler.nodes.cfg.HIRBlock;
@@ -37,12 +37,15 @@ import jdk.graal.compiler.phases.tiers.HighTierContext;
 
 public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 
+    public static final int EARLY_RETURN_DISTANCE_TO_START = 10;
+
     @Override
     protected void run(StructuredGraph graph, HighTierContext context) {
         int loopCount = graph.getNodes(LoopBeginNode.TYPE).count();
 
         long[] result = estimateNodeCount(graph);
-        InterpreterSupport.singleton().trackLoopCount(graph.method(), loopCount, result[0], (int)result[1]);
+        int shortestReturn = shortestReturn(graph);
+        InterpreterSupport.singleton().trackMethodFeatures(graph.method(), loopCount, result[0], (int) result[1], shortestReturn);
     }
 
     private static long[] estimateNodeCount(StructuredGraph graph) {
@@ -52,12 +55,12 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
         ControlFlowGraph cfg = ControlFlowGraph.newBuilder(graph).computeLoops(true).connectBlocks(true).build();
         for (HIRBlock block : cfg.getBlocks()) {
             int loopDepth = block.getLoopDepth();
-            if(loopDepth > maxLoopDepth) {
+            if (loopDepth > maxLoopDepth) {
                 maxLoopDepth = loopDepth;
             }
             for (@SuppressWarnings("unused")
             Node node : block.getNodes()) {
-                count += Math.pow(LOOP_FQ, loopDepth);
+                count += (long) Math.pow(LOOP_FQ, loopDepth);
             }
         }
 
@@ -66,7 +69,28 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 // int loopDepth = cfg.getNodeToBlock().get(node).getLoopDepth();
 // count += Math.pow(LOOP_FQ, loopDepth);
 // }
-        return new long[]{ count, maxLoopDepth};
+        return new long[]{count, maxLoopDepth};
+    }
+
+    private static int shortestReturn(StructuredGraph graph) {
+        int min = Integer.MAX_VALUE;
+        for (ReturnNode returnNode : graph.getNodes(ReturnNode.TYPE)) {
+            int distanceToStart = calcDistanceToStart(returnNode);
+            if (distanceToStart < min) {
+                min = distanceToStart;
+            }
+        }
+        return min;
+    }
+
+    private static int calcDistanceToStart(ReturnNode node) {
+        int count = 0;
+        Node cur = node;
+        while (cur != null) {
+            cur = cur.predecessor();
+            count++;
+        }
+        return count;
     }
 
 }

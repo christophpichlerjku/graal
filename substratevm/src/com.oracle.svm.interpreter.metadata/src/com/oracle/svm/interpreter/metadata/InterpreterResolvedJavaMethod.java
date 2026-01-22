@@ -99,6 +99,8 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     private long nEstimatedCycles;
     @Platforms(Platform.HOSTED_ONLY.class)//
     private int maxLoopDepth;
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    private int shortestReturn;
 
     @Platforms(Platform.HOSTED_ONLY.class)//
     public void setFeatureLoopCount(int loopCount) {
@@ -116,6 +118,11 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
+    public void setShortestReturn(int shortestReturn) {
+        this.shortestReturn = shortestReturn;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
     public int getFeatureLoopCount() {
         return loopCount;
     }
@@ -128,6 +135,11 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @Platforms(Platform.HOSTED_ONLY.class)//
     public int getFeatureMaxLoopDepth() {
         return maxLoopDepth;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public int getShortestReturn() {
+        return shortestReturn;
     }
 
     public static class InlinedBy {
