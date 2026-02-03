@@ -780,7 +780,7 @@ public class DebuggerFeature implements InternalFeature {
 }
 
 record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount,
-                                  long nEstimatedCycles, int maxLoopDepth, int shortestReturn) {
+                                  long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn) {
 
     static final String BYTE_CODE_SIZE = "bcSize";
     static final String TARGET_SIZE = "targetSize";
@@ -788,9 +788,10 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     static final String N_ESTIMATED_CYCLES = "nEstimatedCycles";
     static final String MAX_LOOP_DEPTH = "maxLoopDepth";
     static final String SHORTEST_RETURN = "shortestReturn";
+    static final String LONGEST_RETURN = "longestReturn";
 
     static CompilationUnitInformation create(String clazz, String methodName, int bytecodeSize, int targetCodeSize, InterpreterResolvedJavaMethod method) {
-        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn());
+        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn(), method.getLongestReturn());
     }
 
     static CompilationUnitInformation parse(String line) {
@@ -807,7 +808,8 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
             long nEstimatedCycles = Long.parseLong(splitted[4].split("=")[1]);
             int maxLoopDepth = Integer.parseInt(splitted[5].split("=")[1]);
             int shortestReturn = Integer.parseInt(splitted[6].split("=")[1]);
-            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn);
+            int longestReturn = Integer.parseInt(splitted[7].split("=")[1]);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn, longestReturn);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.err.println(line);
             e.printStackTrace();
@@ -826,14 +828,15 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     String toFileString() {
-        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
                 clazz, method,//
                 BYTE_CODE_SIZE, bytecodeSize,//
                 TARGET_SIZE, targetCodeSize,//
                 LOOP_COUNT, loopCount,//
                 N_ESTIMATED_CYCLES, nEstimatedCycles,//
                 MAX_LOOP_DEPTH, maxLoopDepth,//
-                SHORTEST_RETURN, shortestReturn);
+                SHORTEST_RETURN, shortestReturn,//
+                LONGEST_RETURN, longestReturn);
     }
 }
 
@@ -893,7 +896,6 @@ class LogStartupHook implements RuntimeSupport.Hook {
                     result[pos++] = info;
                 }
             }
-            Log.log().number(pos, 10, true).string(" methods found in spec file").newline();
         } catch (IOException e) {
             Log.log().string(e.getMessage()).newline();
         }

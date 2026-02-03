@@ -35,17 +35,18 @@ import jdk.graal.compiler.nodes.cfg.HIRBlock;
 import jdk.graal.compiler.phases.BasePhase;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
 
-public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
+import java.util.HashSet;
+import java.util.Stack;
 
-    public static final int EARLY_RETURN_DISTANCE_TO_START = 10;
+public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 
     @Override
     protected void run(StructuredGraph graph, HighTierContext context) {
         int loopCount = graph.getNodes(LoopBeginNode.TYPE).count();
 
         long[] result = estimateNodeCount(graph);
-        int shortestReturn = shortestReturn(graph);
-        InterpreterSupport.singleton().trackMethodFeatures(graph.method(), loopCount, result[0], (int) result[1], shortestReturn);
+        int[] returnDistances = returnDistances(graph);
+        InterpreterSupport.singleton().trackMethodFeatures(graph.method(), loopCount, result[0], (int) result[1], returnDistances[MIN_IDX], returnDistances[MAX_IDX]);
     }
 
     private static long[] estimateNodeCount(StructuredGraph graph) {
@@ -72,25 +73,57 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
         return new long[]{count, maxLoopDepth};
     }
 
-    private static int shortestReturn(StructuredGraph graph) {
+    private static final int MIN_IDX = 0;
+    private static final int MAX_IDX = 1;
+
+    private static int[] returnDistances(StructuredGraph graph) {
         int min = Integer.MAX_VALUE;
+        int max = 0;
         for (ReturnNode returnNode : graph.getNodes(ReturnNode.TYPE)) {
-            int distanceToStart = calcDistanceToStart(returnNode);
-            if (distanceToStart < min) {
-                min = distanceToStart;
+            int[] distancesToStart = calcDistancesToStart(returnNode);
+            if (distancesToStart[MIN_IDX] < min) {
+                min = distancesToStart[MIN_IDX];
+            }
+            if (distancesToStart[MAX_IDX] > max) {
+                max = distancesToStart[MAX_IDX];
             }
         }
-        return min;
+        return new int[]{min, max};
     }
 
-    private static int calcDistanceToStart(ReturnNode node) {
-        int count = 0;
-        Node cur = node;
-        while (cur != null) {
-            cur = cur.predecessor();
-            count++;
+    private static int[] calcDistancesToStart(ReturnNode node) {
+        Stack<Node> nodeStack = new Stack<>();
+        Stack<Integer> distStack = new Stack<>();
+        HashSet<Node> visited = new HashSet<>();
+        nodeStack.push(node);
+        distStack.push(0);
+        int minDist = Integer.MAX_VALUE;
+        int maxDist = 0;
+        while (!nodeStack.empty()) {
+            Node cur = nodeStack.pop();
+            if (visited.contains(cur)) {
+                continue;
+            }
+            int depth = distStack.pop();
+            int size = nodeStack.size();
+            for (Node p : cur.cfgPredecessors()) {
+                nodeStack.push(p);
+                distStack.push(depth + 1);
+            }
+            if (nodeStack.size() == size) {
+                if (depth < minDist) {
+                    minDist = depth;
+                }
+                if (depth > maxDist) {
+                    maxDist = depth;
+                }
+            } else if (nodeStack.size() >= size + 2) {
+                //if multiple predecessors, remember current node
+                visited.add(cur);
+            }
+
         }
-        return count;
+        return new int[]{minDist, maxDist};
     }
 
 }

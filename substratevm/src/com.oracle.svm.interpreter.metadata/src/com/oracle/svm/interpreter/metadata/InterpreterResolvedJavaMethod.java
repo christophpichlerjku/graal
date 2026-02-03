@@ -101,25 +101,16 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     private int maxLoopDepth;
     @Platforms(Platform.HOSTED_ONLY.class)//
     private int shortestReturn;
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    private int longestReturn;
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatureLoopCount(int loopCount) {
+    public void setFeatures(int loopCount, long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn) {
         this.loopCount = loopCount;
-    }
-
-    @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatureEstimatedCycles(long nEstimatedCycles) {
         this.nEstimatedCycles = nEstimatedCycles;
-    }
-
-    @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatureMaxLoopDepth(int maxLoopDepth) {
         this.maxLoopDepth = maxLoopDepth;
-    }
-
-    @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setShortestReturn(int shortestReturn) {
         this.shortestReturn = shortestReturn;
+        this.longestReturn = longestReturn;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
@@ -140,6 +131,11 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @Platforms(Platform.HOSTED_ONLY.class)//
     public int getShortestReturn() {
         return shortestReturn;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public int getLongestReturn() {
+        return longestReturn;
     }
 
     public static class InlinedBy {
@@ -197,26 +193,27 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
         return false;
     }
 
-    @Platforms(Platform.HOSTED_ONLY.class) public boolean needMethodBody;
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public boolean needMethodBody;
 
     // Only called during universe building
     @Platforms(Platform.HOSTED_ONLY.class)
     private InterpreterResolvedJavaMethod(ResolvedJavaMethod originalMethod, String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass,
-                    InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
-                    byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
-                    ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
+                                          InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
+                                          byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
+                                          ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
         this(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code, exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex,
-                        gotOffset,
-                        enterStubOffset, methodId);
+                gotOffset,
+                enterStubOffset, methodId);
         this.originalMethod = originalMethod;
         this.needMethodBody = false;
         this.inlinedBy = new InterpreterResolvedJavaMethod.InlinedBy(this, new HashSet<>());
     }
 
     private InterpreterResolvedJavaMethod(String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass, InterpreterUnresolvedSignature signature,
-                    CompiledSignature compiledSignature,
-                    byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
-                    ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
+                                          CompiledSignature compiledSignature,
+                                          byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
+                                          ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
         this.name = name;
         this.maxLocals = maxLocals;
         this.maxStackSize = maxStackSize;
@@ -239,22 +236,22 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
 
     @VisibleForSerialization
     public static InterpreterResolvedJavaMethod create(String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass,
-                    InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
-                    byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
-                    ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
+                                                       InterpreterUnresolvedSignature signature, CompiledSignature compiledSignature,
+                                                       byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
+                                                       ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
         return new InterpreterResolvedJavaMethod(name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code,
-                        exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
+                exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
     }
 
     // Only called during universe building
     @Platforms(Platform.HOSTED_ONLY.class)
     public static InterpreterResolvedJavaMethod create(ResolvedJavaMethod originalMethod, String name, int maxLocals, int maxStackSize, int modifiers, InterpreterResolvedObjectType declaringClass,
-                    InterpreterUnresolvedSignature signature,
-                    byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
-                    ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
+                                                       InterpreterUnresolvedSignature signature,
+                                                       byte[] code, ExceptionHandler[] exceptionHandlers, LineNumberTable lineNumberTable, LocalVariableTable localVariableTable,
+                                                       ReferenceConstant<FunctionPointerHolder> nativeEntryPoint, int vtableIndex, int gotOffset, int enterStubOffset, int methodId) {
         CompiledSignature compiledSignature = null;
         return new InterpreterResolvedJavaMethod(originalMethod, name, maxLocals, maxStackSize, modifiers, declaringClass, signature, compiledSignature, code,
-                        exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
+                exceptionHandlers, lineNumberTable, localVariableTable, nativeEntryPoint, vtableIndex, gotOffset, enterStubOffset, methodId);
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
