@@ -217,6 +217,10 @@ public class DebuggerFeature implements InternalFeature {
             accessImpl.registerAsRoot(java.util.Random.class.getConstructor(long.class), true, "Hack for allowing Random.<init> to be called from interpreter");
             accessImpl.registerAsRoot(Double.class.getDeclaredMethod("longBitsToDouble", long.class), true, "Hack for longBitsToDouble to be called from interpreter");
             accessImpl.registerAsRoot(Double.class.getDeclaredMethod("doubleToRawLongBits", double.class), true, "Hack for doubleToRawLongBits to be called from interpreter");
+            String[] strictMathMethods = {"ceil", "floor","round"};
+            for(String m: strictMathMethods) {
+                accessImpl.registerAsRoot(StrictMath.class.getMethod(m, double.class), true, "Hack for StringMath::"+m+" to be called from interpreter");
+            }
         } catch (NoSuchMethodException | NoSuchFieldException e) {
             throw VMError.shouldNotReachHereAtRuntime();
         }
@@ -230,9 +234,13 @@ public class DebuggerFeature implements InternalFeature {
             // consider DualPivotQuicksort.java:268, int.class is not needed if the sort helper
             // is inlined, therefore it's not needed. Still needed for interpreter execution.
             access.registerAsAccessed(Integer.class.getField("TYPE"));
+            access.registerAsAccessed(java.util.concurrent.atomic.AtomicInteger.class.getDeclaredField("VALUE"));
         } catch (NoSuchFieldException e) {
             throw VMError.shouldNotReachHereAtRuntime();
         }
+        access.registerAsUsed(java.lang.StrictMath.class);
+
+
 
         methodsProcessedDuringAnalysis = new HashSet<>();
 
@@ -818,8 +826,8 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     static Pair<String, String> parseOnlyClazzMethod(String line) {
-        String[] splitted = line.split(" ");
-        String[] classMethod = splitted[0].split("::");
+        String[] split = line.split(" ");
+        String[] classMethod = split[0].split("::");
         if (classMethod.length != 2) {
             System.err.println(line);
             return null;
@@ -844,7 +852,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
     @Override
     public void execute(boolean isFirstIsolate) {
         final String path = InterpreterOptions.HybridSpecification.getValue();
-        if (path.length() == 0) {
+        if (path.isEmpty()) {
             Log.log().string("No methods set to managed execution").newline();
             return;
         }
