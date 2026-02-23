@@ -55,6 +55,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.oracle.svm.core.thread.ThreadListenerSupport;
+import jdk.vm.ci.meta.JavaType;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.Pair;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -217,10 +218,9 @@ public class DebuggerFeature implements InternalFeature {
             accessImpl.registerAsRoot(java.util.Random.class.getConstructor(long.class), true, "Hack for allowing Random.<init> to be called from interpreter");
             accessImpl.registerAsRoot(Double.class.getDeclaredMethod("longBitsToDouble", long.class), true, "Hack for longBitsToDouble to be called from interpreter");
             accessImpl.registerAsRoot(Double.class.getDeclaredMethod("doubleToRawLongBits", double.class), true, "Hack for doubleToRawLongBits to be called from interpreter");
-            String[] strictMathMethods = {"ceil", "floor","round"};
-            for(String m: strictMathMethods) {
-                accessImpl.registerAsRoot(StrictMath.class.getMethod(m, double.class), true, "Hack for StringMath::"+m+" to be called from interpreter");
-            }
+            accessImpl.registerAsRoot(StrictMath.class.getMethod("ceil", double.class), true, "Hack for StrictMath::ceil to be called from interpreter");
+            accessImpl.registerAsRoot(StrictMath.class.getMethod("floor", double.class), true, "Hack for StrictMath::floor to be called from interpreter");
+            accessImpl.registerAsRoot(StrictMath.class.getMethod("round", double.class), true, "Hack for StrictMath::round to be called from interpreter");
         } catch (NoSuchMethodException | NoSuchFieldException e) {
             throw VMError.shouldNotReachHereAtRuntime();
         }
@@ -239,7 +239,6 @@ public class DebuggerFeature implements InternalFeature {
             throw VMError.shouldNotReachHereAtRuntime();
         }
         access.registerAsUsed(java.lang.StrictMath.class);
-
 
 
         methodsProcessedDuringAnalysis = new HashSet<>();
@@ -788,7 +787,8 @@ public class DebuggerFeature implements InternalFeature {
 }
 
 record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount,
-                                  long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn) {
+                                  long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn,
+                                  int nPrimitivePars, int nComplexPars) {
 
     static final String BYTE_CODE_SIZE = "bcSize";
     static final String TARGET_SIZE = "targetSize";
@@ -797,15 +797,29 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     static final String MAX_LOOP_DEPTH = "maxLoopDepth";
     static final String SHORTEST_RETURN = "shortestReturn";
     static final String LONGEST_RETURN = "longestReturn";
+    static final String N_PRIMITIVE_PARS = "nPrimitivePars";
+    static final String N_COMPLEX_PARS = "nComplexPars";
 
     static CompilationUnitInformation create(String clazz, String methodName, int bytecodeSize, int targetCodeSize, InterpreterResolvedJavaMethod method) {
-        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn(), method.getLongestReturn());
+        int nPrimitivePars = 0;
+        int nComplexPars = 0;
+        for(JavaType t: method.toParameterTypes()) {
+            switch(t.getJavaKind()) {
+                case Boolean,Byte,Short,Char,Int,Float,Long,Double,Void -> {
+                    nPrimitivePars++;
+                }
+                default -> {
+                    nComplexPars++;
+                }
+            }
+        }
+        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn(), method.getLongestReturn(), nPrimitivePars, nComplexPars);
     }
 
     static CompilationUnitInformation parse(String line) {
         String[] splitted = line.split(" ");
         String[] classMethod = splitted[0].split("::");
-        if (classMethod.length != 2 || splitted.length < 6) {
+        if (classMethod.length != 2 || splitted.length < 10) {
             System.err.println(line);
             return null;
         }
@@ -817,7 +831,9 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
             int maxLoopDepth = Integer.parseInt(splitted[5].split("=")[1]);
             int shortestReturn = Integer.parseInt(splitted[6].split("=")[1]);
             int longestReturn = Integer.parseInt(splitted[7].split("=")[1]);
-            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn, longestReturn);
+            int nPrimitivePars = Integer.parseInt(splitted[8].split("=")[1]);
+            int nComplexPars = Integer.parseInt(splitted[9].split("=")[1]);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn, longestReturn, nPrimitivePars, nComplexPars);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.err.println(line);
             e.printStackTrace();
@@ -836,7 +852,7 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     String toFileString() {
-        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
                 clazz, method,//
                 BYTE_CODE_SIZE, bytecodeSize,//
                 TARGET_SIZE, targetCodeSize,//
@@ -844,7 +860,9 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
                 N_ESTIMATED_CYCLES, nEstimatedCycles,//
                 MAX_LOOP_DEPTH, maxLoopDepth,//
                 SHORTEST_RETURN, shortestReturn,//
-                LONGEST_RETURN, longestReturn);
+                LONGEST_RETURN, longestReturn,//
+                N_PRIMITIVE_PARS, nPrimitivePars,//
+                N_COMPLEX_PARS, nComplexPars);
     }
 }
 
@@ -853,7 +871,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
     public void execute(boolean isFirstIsolate) {
         final String path = InterpreterOptions.HybridSpecification.getValue();
         if (path.isEmpty()) {
-            Log.log().string("No methods set to managed execution").newline();
+            //Log.log().string("No methods set to managed execution").newline().flush();
             return;
         }
 
@@ -871,8 +889,8 @@ class LogStartupHook implements RuntimeSupport.Hook {
                     if (InterpreterDirectives.forceInterpreterExecution(m)) {
                         savedCodeSize += m.getCodeSize();
                         count++;
-                    } else {
-                        Log.log().string("[javahybrid] Failed to interpret: ").signed(i).newline();
+                        //} else {
+                        //if(LOG) Log.log().string("[javahybrid] Failed to interpret: ").signed(i).newline();
                     }
                 }
             }
@@ -884,8 +902,11 @@ class LogStartupHook implements RuntimeSupport.Hook {
     }
 
     private static void printInformation(long part, long total, String text) {
-        Log.log().string("[javahybrid] ").signed(part).string(" of ").signed(total).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
+        if (LOG)
+            Log.log().string("[javahybrid] ").signed(part).string(" of ").signed(total).string(" (").rational(part * 100, total, 4).string("%) ").string(text).newline();
     }
+
+    private static final boolean LOG = true; //TODO
 
     private static final String SPEC_SUFFIX = "Spec.txt";
 
@@ -894,7 +915,7 @@ class LogStartupHook implements RuntimeSupport.Hook {
         Pair<String, String>[] result = new Pair[4];
         int pos = 0;
         try {
-            BufferedReader r = new BufferedReader(new FileReader(new File(path + SPEC_SUFFIX)));
+            BufferedReader r = new BufferedReader(new FileReader(path + SPEC_SUFFIX));
             for (String line = r.readLine(); line != null; line = r.readLine()) {
                 Pair<String, String> info = CompilationUnitInformation.parseOnlyClazzMethod(line);
                 if (info != null) {

@@ -37,5 +37,6 @@ public class InterpreterTimeTrackHook implements RuntimeSupport.Hook {
             Log.log().unsigned(Interpreter.singleCallTimes[i]);
         }
         Log.log().newline().flush();
+        Log.log().string("Valid times: ").bool(Interpreter.timeTrackValid).newline().flush();
     }
 }

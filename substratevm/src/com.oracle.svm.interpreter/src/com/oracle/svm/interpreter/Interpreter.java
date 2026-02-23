@@ -383,7 +383,7 @@ public final class Interpreter {
     }
 
     //TODO change back
-    private static final boolean ENABLE_REOPT_TO_AOT = false;
+    private static final boolean ENABLE_REOPT_TO_AOT = true;
 
     private static Object execute0(InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean stayInInterpreter) {
         if (InterpreterOptions.InterpreterTrackTimeSpent.getValue()) {
@@ -395,7 +395,7 @@ public final class Interpreter {
             final long reoptCount = Interpreter.reoptedMethodCount.get() + 1;
             Interpreter.reoptedMethodCount.set(reoptCount);
 // long reoptCount = Interpreter.reoptedMethodCount.incrementAndGet();
-            Log.log().string("Reopt increment to ").signed(Interpreter.reoptedMethodCount.get()).newline().flush();
+//            Log.log().string("Reopt increment to ").signed(Interpreter.reoptedMethodCount.get()).newline().flush();
             // Note: Although we decided the method should run its AOT companion, we still do _one_
             // execution in the interpreter
         }
@@ -519,6 +519,8 @@ public final class Interpreter {
                 .string("/top=").unsigned(top).newline();
     }
 
+    public static boolean timeTrackValid = true;
+
     static void openExecTimeTrack(InterpreterResolvedJavaMethod method) {
         if (curbaseMethod != null) {
             resumeExecTimeTrack();
@@ -529,9 +531,10 @@ public final class Interpreter {
         //Log.log().string(" -> OPEN ").string(method.getDeclaringClass().getName()).string("::").string(method.getName()).newline().flush();
         //start = now()
         long cur = timeTrackStart.get();
-        if (cur != 0) {
+        if (cur != 0) { //TODO remove
             Log.log().string("cur=").signed(cur).newline().flush();
-            VMError.guarantee(cur == 0);
+//            VMError.guarantee(cur == 0);
+            timeTrackValid = false;
         }
         timeTrackStart.set(System.nanoTime());
     }
