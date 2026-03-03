@@ -788,7 +788,7 @@ public class DebuggerFeature implements InternalFeature {
 
 record CompilationUnitInformation(String clazz, String method, int bytecodeSize, int targetCodeSize, int loopCount,
                                   long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn,
-                                  int nPrimitivePars, int nComplexPars) {
+                                  int nPrimitivePars, int nComplexPars, int nIsNullNodes) {
 
     static final String BYTE_CODE_SIZE = "bcSize";
     static final String TARGET_SIZE = "targetSize";
@@ -799,6 +799,7 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     static final String LONGEST_RETURN = "longestReturn";
     static final String N_PRIMITIVE_PARS = "nPrimitivePars";
     static final String N_COMPLEX_PARS = "nComplexPars";
+    static final String N_IS_NULL_NODES = "nIsNullNodes";
 
     static CompilationUnitInformation create(String clazz, String methodName, int bytecodeSize, int targetCodeSize, InterpreterResolvedJavaMethod method) {
         int nPrimitivePars = 0;
@@ -813,13 +814,13 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
                 }
             }
         }
-        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn(), method.getLongestReturn(), nPrimitivePars, nComplexPars);
+        return new CompilationUnitInformation(clazz, methodName, bytecodeSize, targetCodeSize, method.getFeatureLoopCount(), method.getFeatureEstimatedCycles(), method.getFeatureMaxLoopDepth(), method.getShortestReturn(), method.getLongestReturn(), nPrimitivePars, nComplexPars, method.getNIsNullNodes());
     }
 
     static CompilationUnitInformation parse(String line) {
         String[] splitted = line.split(" ");
         String[] classMethod = splitted[0].split("::");
-        if (classMethod.length != 2 || splitted.length < 10) {
+        if (classMethod.length != 2 || splitted.length < 11) {
             System.err.println(line);
             return null;
         }
@@ -833,7 +834,8 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
             int longestReturn = Integer.parseInt(splitted[7].split("=")[1]);
             int nPrimitivePars = Integer.parseInt(splitted[8].split("=")[1]);
             int nComplexPars = Integer.parseInt(splitted[9].split("=")[1]);
-            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn, longestReturn, nPrimitivePars, nComplexPars);
+            int nIsNullNodes = Integer.parseInt(splitted[10].split("=")[1]);
+            return new CompilationUnitInformation(classMethod[0], classMethod[1], bytecodeSize, targetCodeSize, loopCount, nEstimatedCycles, maxLoopDepth, shortestReturn, longestReturn, nPrimitivePars, nComplexPars, nIsNullNodes);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.err.println(line);
             e.printStackTrace();
@@ -852,7 +854,7 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
     }
 
     String toFileString() {
-        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
+        return String.format("%s::%s %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d %s=%d", //
                 clazz, method,//
                 BYTE_CODE_SIZE, bytecodeSize,//
                 TARGET_SIZE, targetCodeSize,//
@@ -862,7 +864,8 @@ record CompilationUnitInformation(String clazz, String method, int bytecodeSize,
                 SHORTEST_RETURN, shortestReturn,//
                 LONGEST_RETURN, longestReturn,//
                 N_PRIMITIVE_PARS, nPrimitivePars,//
-                N_COMPLEX_PARS, nComplexPars);
+                N_COMPLEX_PARS, nComplexPars,//
+                N_IS_NULL_NODES, nIsNullNodes );
     }
 }
 

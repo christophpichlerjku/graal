@@ -103,14 +103,17 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     private int shortestReturn;
     @Platforms(Platform.HOSTED_ONLY.class)//
     private int longestReturn;
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    private int nIsNullNodes;
 
     @Platforms(Platform.HOSTED_ONLY.class)//
-    public void setFeatures(int loopCount, long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn) {
+    public void setFeatures(int loopCount, long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn, int nIsNullNodes) {
         this.loopCount = loopCount;
         this.nEstimatedCycles = nEstimatedCycles;
         this.maxLoopDepth = maxLoopDepth;
         this.shortestReturn = shortestReturn;
         this.longestReturn = longestReturn;
+        this.nIsNullNodes = nIsNullNodes;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)//
@@ -136,6 +139,11 @@ public final class InterpreterResolvedJavaMethod implements ResolvedJavaMethod {
     @Platforms(Platform.HOSTED_ONLY.class)//
     public int getLongestReturn() {
         return longestReturn;
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)//
+    public int getNIsNullNodes() {
+        return nIsNullNodes;
     }
 
     public static class InlinedBy {

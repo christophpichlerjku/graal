@@ -30,6 +30,7 @@ import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.nodes.LoopBeginNode;
 import jdk.graal.compiler.nodes.ReturnNode;
 import jdk.graal.compiler.nodes.StructuredGraph;
+import jdk.graal.compiler.nodes.calc.IsNullNode;
 import jdk.graal.compiler.nodes.cfg.ControlFlowGraph;
 import jdk.graal.compiler.nodes.cfg.HIRBlock;
 import jdk.graal.compiler.phases.BasePhase;
@@ -46,7 +47,8 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 
         long[] result = estimateNodeCount(graph);
         int[] returnDistances = returnDistances(graph);
-        InterpreterSupport.singleton().trackMethodFeatures(graph.method(), loopCount, result[0], (int) result[1], returnDistances[MIN_IDX], returnDistances[MAX_IDX]);
+        int nPointerAgainstNullComparisons = pointerAgainstNullComparisons(graph);
+        InterpreterSupport.singleton().trackMethodFeatures(graph.method(), loopCount, result[0], (int) result[1], returnDistances[MIN_IDX], returnDistances[MAX_IDX], nPointerAgainstNullComparisons);
     }
 
     private static long[] estimateNodeCount(StructuredGraph graph) {
@@ -124,6 +126,16 @@ public class CollectFeatureOfMethodsPhase extends BasePhase<HighTierContext> {
 
         }
         return new int[]{minDist, maxDist};
+    }
+
+    private static int pointerAgainstNullComparisons(StructuredGraph graph) {
+        int count = 0;
+        for(Node node: graph.getNodes()) {
+            if(node instanceof IsNullNode) {
+                count++;
+            }
+        }
+        return count;
     }
 
 }

@@ -149,5 +149,5 @@ public abstract class InterpreterSupport {
     public abstract void buildMethodIdMapping(ResolvedJavaMethod[] encodedMethods);
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public abstract void trackMethodFeatures(ResolvedJavaMethod method, int loopCount, long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn);
+    public abstract void trackMethodFeatures(ResolvedJavaMethod method, int loopCount, long nEstimatedCycles, int maxLoopDepth, int shortestReturn, int longestReturn, int nIsNullNodes);
 }

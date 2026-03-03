@@ -532,7 +532,7 @@ public final class Interpreter {
         //start = now()
         long cur = timeTrackStart.get();
         if (cur != 0) { //TODO remove
-            Log.log().string("cur=").signed(cur).newline().flush();
+//            Log.log().string("cur=").signed(cur).newline().flush();
 //            VMError.guarantee(cur == 0);
             timeTrackValid = false;
         }
